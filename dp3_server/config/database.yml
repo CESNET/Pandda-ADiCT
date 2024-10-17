@@ -1,0 +1,15 @@
+# MongoDB Connection configuration
+db_name: "adict"
+username: "adict"
+password: "adict"
+
+# Standalone - single host, just specify the connection
+connection:
+  mode: "standalone"
+  host:
+    address: "127.0.0.1"
+    port: 27017
+
+# Replica-set - specify the list of connections of all nodes and the replica-set name
+storage:
+  snapshot_bucket_size: 8

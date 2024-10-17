@@ -1,0 +1,28 @@
+# This Compose file runs the dependencies for the DP3 platform.
+services:
+  rabbitmq:
+    container_name: "adict_rabbitmq"
+    image: "adict_rabbitmq"
+    build: "docker/rabbitmq"
+    ports:
+      - "5672:5672"  # RabbitMQ default port
+      - "15672:15672"  # RabbitMQ management plugin port
+    environment:
+      DP3_APP_NAME: adict
+      DP3_WORKER_NUM: 2
+
+  mongo:
+    container_name: "adict_mongo"
+    image: mongo:latest
+    ports:
+      - "27017:27017"  # MongoDB default port
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: adict
+      MONGO_INITDB_ROOT_PASSWORD: adict
+
+  redis:
+    container_name: "adict_redis"
+    image: redis
+    ports:
+      - "6379:6379"  # Redis default port
+    command: [ "redis-server", "--appendonly", "yes" ]

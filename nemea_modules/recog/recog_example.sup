@@ -1,0 +1,118 @@
+<!--
+EXAMPLE CONFIGURATION FOR NEMEA-SUPERVISOR
+
+Filters and modules for matching Recog patterns in IDP_CONTENT_REV fields and sending results to ADiCT server.
+
+Assumes a preceding filter selecting only traffic with DST_IP from monitored prefixes (interface: "adict_filter_dst")
+-->
+
+<!-- SSH -->
+<module>
+  <name>adict_filter_ssh</name>
+  <enabled>true</enabled>
+  <path>/usr/bin/nemea/unirecfilter</path>
+  <params>-F "DST_PORT == 22"</params>
+  <trapinterfaces>
+    <interface>
+      <type>UNIXSOCKET</type>
+      <direction>IN</direction>
+      <params>adict_filter_dst</params>
+    </interface>
+    <interface>
+      <type>UNIXSOCKET</type>
+      <direction>OUT</direction>
+      <params>adict_recog_ssh_in</params>
+    </interface>
+  </trapinterfaces>
+</module>
+
+<module>
+  <name>adict_recog_ssh</name>
+  <enabled>true</enabled>
+  <path>/data/adict/recog/recog.py</path>
+  <params>-m ssh -d /data/adict/recog/ssh_banners.xml</params>
+  <trapinterfaces>
+    <interface>
+      <type>UNIXSOCKET</type>
+      <direction>IN</direction>
+      <params>adict_recog_ssh_in</params>
+    </interface>
+    <interface>
+      <type>UNIXSOCKET</type>
+      <direction>OUT</direction>
+      <params>adict_recog_ssh_out</params>
+    </interface>
+  </trapinterfaces>
+</module>
+
+<module>
+  <enabled>true</enabled>
+  <name>adict_recog_ssh_sender</name>
+  <path>/data/adict/nead.py</path>
+  <params>-u http://adict.example.org/adict/datapoints -s recog_ssh@example</params>
+  <module-restarts>0</module-restarts>
+  <trapinterfaces>
+    <interface>
+      <type>UNIXSOCKET</type>
+      <direction>IN</direction>
+      <params>adict_recog_ssh_out</params>
+    </interface>
+  </trapinterfaces>
+</module>
+
+
+
+<!-- SMTP -->
+<module>
+  <name>adict_filter_smtp</name>
+  <enabled>true</enabled>
+  <path>/usr/bin/nemea/unirecfilter</path>
+  <params>-F 'DST_PORT==25 || DST_PORT==587'</params>
+  <trapinterfaces>
+    <interface>
+      <type>UNIXSOCKET</type>
+      <direction>IN</direction>
+      <params>adict_filter_dst</params>
+    </interface>
+    <interface>
+      <type>UNIXSOCKET</type>
+      <direction>OUT</direction>
+      <params>adict_recog_smtp_in</params>
+    </interface>
+  </trapinterfaces>
+</module>
+
+<module>
+  <name>adict_recog_smtp</name>
+  <enabled>true</enabled>
+  <path>/data/adict/recog/recog.py</path>
+  <params>-m smtp -d /data/adict/recog/smtp_banners.xml</params>
+  <trapinterfaces>
+    <interface>
+      <type>UNIXSOCKET</type>
+      <direction>IN</direction>
+      <params>adict_recog_smtp_in</params>
+    </interface>
+    <interface>
+      <type>UNIXSOCKET</type>
+      <direction>OUT</direction>
+      <params>adict_recog_smtp_out</params>
+    </interface>
+  </trapinterfaces>
+</module>
+
+<module>
+  <enabled>true</enabled>
+  <name>adict_recog_smtp_sender</name>
+  <path>/data/adict/nead.py</path>
+  <params>-u http://adict.example.org/adict/datapoints -s recog_ssh@example</params>
+  <module-restarts>0</module-restarts>
+  <trapinterfaces>
+    <interface>
+      <type>UNIXSOCKET</type>
+      <direction>IN</direction>
+      <params>adict_recog_smtp_out</params>
+    </interface>
+  </trapinterfaces>
+</module>
+

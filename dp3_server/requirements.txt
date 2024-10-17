@@ -1,0 +1,4 @@
+-e git+https://github.com/CESNET/dp3.git#egg=dp-cubed
+requests
+setuptools>=57.0.0
+dnspython~=2.0.0
