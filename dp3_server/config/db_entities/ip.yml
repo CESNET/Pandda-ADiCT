@@ -67,15 +67,14 @@ attribs:
       max_age: 7d
       aggregate: true
 
-
-# IP activity classes
+  # IP activity classes
   activity_class:
     name: Activity class
     description: Class of the device activity based on the number of transmitted bytes (off, idle, low, medium, high).
     type: plain
     data_type: category<string; off, idle, light, medium, high>
 
-# DNS open resolver
+  # DNS open resolver
   open_resolver:
     name: DNS open resolver
     description: Open DNS resolver is running on the device
