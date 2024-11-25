@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
 
-import sys
-import pytrap
-import threading
 import ipaddress
 import signal
-from json import dumps
-from queue import Queue
-from sys import stderr, argv
+import sys
+import threading
 from argparse import ArgumentParser
 from datetime import datetime, timedelta
+from json import dumps
+from queue import Queue
+from sys import argv, stderr
 
-inputspec = 'ipaddr SRC_IP,uint64 BYTES,time TIME_FIRST,time TIME_LAST,uint32 PACKETS'
+import pytrap
+
+inputspec = "ipaddr SRC_IP,uint64 BYTES,time TIME_FIRST,time TIME_LAST,uint32 PACKETS"
 
 verbose = False
 stop = False  # global flag to stop reading
 
 
 class TrapIfc:
-    """ Class wrapping the PyTrap functionality. """
+    """Class wrapping the PyTrap functionality."""
 
     def __init__(self, input_spec):
-
-        """ Initialize PyTrap interface for receiving data in UNIREC format. """
+        """Initialize PyTrap interface for receiving data in UNIREC format."""
         self.input_spec = input_spec
         self.trap = pytrap.TrapCtx()
         self.rec = pytrap.UnirecTemplate(input_spec)
@@ -30,16 +30,16 @@ class TrapIfc:
         try:
             self.trap.init(argv, 1, 1)
         except pytrap.TrapError as e:
-            print(f'PyTrap: {e}', file=stderr)
-            exit(1)
+            print(f"PyTrap: {e}", file=stderr)
+            sys.exit(1)
         except pytrap.TrapHelp:
-            exit(0)
+            sys.exit(0)
 
         self.trap.setRequiredFmt(0, pytrap.FMT_UNIREC, input_spec)
         self.trap.setDataFmt(0, pytrap.FMT_JSON)
 
     def recv_data(self):
-        """ Attempt to read data from trap interface.
+        """Attempt to read data from trap interface.
 
         Returns:
             True on success, False otherwise."""
@@ -53,7 +53,7 @@ class TrapIfc:
             return False
 
     def send_data(self, data):
-        """ Attempt to send data by trap interface."""
+        """Attempt to send data by trap interface."""
         try:
             self.trap.send(data)
         except pytrap.TimeoutError as e:
@@ -116,13 +116,14 @@ def slot_generator(tm: datetime, interval: int):
     while True:
         tm = tm + timedelta(seconds=interval)
         if verbose:
-            print(f"Creating slot from {tm:%H:%M:%S} to {tm+timedelta(seconds=interval):%H:%M:%S}")
+            next_tm = tm + timedelta(seconds=interval)
+            print(f"Creating slot from {tm:%H:%M:%S} to {next_tm:%H:%M:%S}")
         yield tm
 
 
 def flow_split(start, end, interval):
     """Dividing one flow  into coverage of the share, per one time period,
-       based on count of time periods in which interval lasts."""
+    based on count of time periods in which interval lasts."""
 
     count = 0
     while start < end:
@@ -133,9 +134,9 @@ def flow_split(start, end, interval):
 
 def _ip_filtering(networks, ip):
     """Check if record for current ip should be stored based on -N argument.
-       If -N is not set, all ip addresses should be stored."""
+    If -N is not set, all ip addresses should be stored."""
 
-    if networks == list():
+    if not networks:
         return True
     else:
         ip = int(ipaddress.ip_address(ip))
@@ -154,16 +155,18 @@ def _insert_data(data_table, slot, ip, rec_bytes, rec_packets, rec_flow):
         data_table[slot][ip]["packets"] += rec_packets
         data_table[slot][ip]["flows"] += rec_flow
     else:
-        data_table[slot][ip] = {"bytes": rec_bytes,
-                                "packets": rec_packets,
-                                "flows": rec_flow}
+        data_table[slot][ip] = {
+            "bytes": rec_bytes,
+            "packets": rec_packets,
+            "flows": rec_flow,
+        }
 
 
 def data_aggregation(data_table: dict, interval: int, trap, networks, biflow):
     """Aggregate incoming flow records into an appropriate time period in timeline.
-       If record lasted throughout multiple time periods, it is divided and values are
-       interpolated into multiple smaller records, which are then counted to corresponding
-       time periods."""
+    If record lasted throughout multiple time periods, it is divided and values are
+    interpolated into multiple smaller records, which are then counted to corresponding
+    time periods."""
 
     src_ip = trap.return_src_ip()
     src_filter = _ip_filtering(networks, src_ip)
@@ -175,12 +178,12 @@ def data_aggregation(data_table: dict, interval: int, trap, networks, biflow):
         dst_filter = False
 
     if src_filter or dst_filter:
-
         slot = floor_time(trap.return_time("TIME_FIRST"), interval)
         end = trap.return_time("TIME_LAST")
 
         if end - slot > timedelta(seconds=interval):
-            # Flow spans multiple time intervals - divide it to multiple bins proportionally
+            # Flow spans multiple time intervals
+            # divide it to multiple bins proportionally
             start = trap.return_time("TIME_FIRST")
             flow_duration = (end - start).total_seconds()
             flow_share = flow_split(slot, end, interval)
@@ -192,38 +195,63 @@ def data_aggregation(data_table: dict, interval: int, trap, networks, biflow):
 
             while end - slot > timedelta(seconds=0):
                 interval_end = slot + timedelta(seconds=interval)
-                if interval_end > end:
-                    interval_end = end
+                interval_end = min(interval_end, end)
 
                 if slot not in data_table:
-                    slot = list(sorted(data_table.keys()))[0]
+                    slot = sorted(data_table.keys())[0]
 
                 duration = (interval_end - start).total_seconds()
                 if src_filter:
-                    _insert_data(data_table, slot, src_ip, bytes_per_sec * duration, packets_per_sec * duration,
-                                 flow_share)
+                    _insert_data(
+                        data_table,
+                        slot,
+                        src_ip,
+                        bytes_per_sec * duration,
+                        packets_per_sec * duration,
+                        flow_share,
+                    )
 
                 if dst_filter:
-                    _insert_data(data_table, slot, dst_ip, rev_bytes_per_sec * duration, rev_packets_per_sec * duration,
-                                 flow_share)
+                    _insert_data(
+                        data_table,
+                        slot,
+                        dst_ip,
+                        rev_bytes_per_sec * duration,
+                        rev_packets_per_sec * duration,
+                        flow_share,
+                    )
 
                 start = interval_end
                 slot = interval_end
 
         else:
             if slot not in data_table:
-                slot = list(sorted(data_table.keys()))[0]
+                slot = sorted(data_table.keys())[0]
 
             if src_filter:
-                _insert_data(data_table, slot, src_ip, trap.return_bytes(), trap.return_packets(), 1)
+                _insert_data(
+                    data_table,
+                    slot,
+                    src_ip,
+                    trap.return_bytes(),
+                    trap.return_packets(),
+                    1,
+                )
 
             if dst_filter:
-                _insert_data(data_table, slot, dst_ip, trap.return_bytes_rev(), trap.return_packets_rev(), 1)
+                _insert_data(
+                    data_table,
+                    slot,
+                    dst_ip,
+                    trap.return_bytes_rev(),
+                    trap.return_packets_rev(),
+                    1,
+                )
 
 
 def _post_data(trap, interval, queue, src_tag):
     """Send data to the trap interface based on queue
-       of old intervals from input-processing method"""
+    of old intervals from input-processing method"""
 
     while True:
         queue_item = queue.get(block=True)  # get timestamp of interval to send
@@ -237,21 +265,23 @@ def _post_data(trap, interval, queue, src_tag):
         if verbose:
             print(f"Sending data of slot {time:%H:%M:%S} ({len(slot_data)} IPs)")
         for ip, vals in slot_data.items():
-            data = [{
-                "type": "ip",
-                "attr": "activity",
-                "id": ip,
-                "t1": t_start,
-                "t2": t_end,
-                "v": {
-                    "flows": [float(round(vals["flows"], 4))],
-                    "packets": [float(round(vals["packets"], 4))],
-                    "bytes": [float(round(vals["bytes"], 4))]
-                },
-                "src": src_tag
-            }]
+            data = [
+                {
+                    "type": "ip",
+                    "attr": "activity",
+                    "id": ip,
+                    "t1": t_start,
+                    "t2": t_end,
+                    "v": {
+                        "flows": [float(round(vals["flows"], 4))],
+                        "packets": [float(round(vals["packets"], 4))],
+                        "bytes": [float(round(vals["bytes"], 4))],
+                    },
+                    "src": src_tag,
+                }
+            ]
 
-            trap.send_data(bytearray(dumps(data), 'utf-8'))
+            trap.send_data(bytearray(dumps(data), "utf-8"))
 
         if verbose:
             print(f"Slot {time:%H:%M:%S} sent.")
@@ -260,29 +290,32 @@ def _post_data(trap, interval, queue, src_tag):
 
 
 def stop_program(signum, frame):
-    global stop
+    global stop  # noqa PLW0603
     stop = True
     # Reset signal handlers to default, so second signal closes the program immediately
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
     signal.signal(signal.SIGABRT, signal.SIG_DFL)
     if verbose:
-        print("Signal received. Going to stop the program after the cached data are sent. Press Ctrl-C again to exit immediately.")
+        print(
+            "Signal received. Going to stop the program after the cached data are sent."
+            " Press Ctrl-C again to exit immediately."
+        )
 
 
 def input_processing(trap: TrapIfc, interval, src_tag, maxage, networks):
     """Main loop for receiving and processing data.
-       Dictionary data_table is main data structure for storing records.
-       Format of data table is: {time -> {src_ip -> {number_of_flows/packets/bytes}}}
+    Dictionary data_table is main data structure for storing records.
+    Format of data table is: {time -> {src_ip -> {number_of_flows/packets/bytes}}}
 
-       time: depends on interval that user set. If user set for example --interval 600,
-       this parameter will have values like this 10:00:00, 10:10:00, 10:20:00. This timestamps means
-       start of intervals in which records are aggregated.
+    time: depends on interval that user set. If user set for example --interval 600,
+    this parameter will have values like this 10:00:00, 10:10:00, 10:20:00.
+    These timestamps mean start of intervals in which records are aggregated.
 
-       src_ip: ip addresses for which are data stored in current interval
-       """
+    src_ip: ip addresses for which are data stored in current interval
+    """
 
-    data_table = dict()
+    data_table = {}
     # current time = the maximum of all flow-end timestamps seen
     current_time = None
     # biflow = support for biflow data
@@ -309,7 +342,7 @@ def input_processing(trap: TrapIfc, interval, src_tag, maxage, networks):
         elif current_time < trap.return_time("TIME_LAST"):
             current_time = trap.return_time("TIME_LAST")
             # If some interval is older than max age, add it to the queue for send
-            for time in list(sorted(data_table.keys())):
+            for time in sorted(data_table.keys()):
                 if current_time - time > timedelta(seconds=maxage):
                     queue.put((time, data_table[time]), block=True)
                     data_table.pop(time)
@@ -320,15 +353,15 @@ def input_processing(trap: TrapIfc, interval, src_tag, maxage, networks):
 
         if biflow is None:
             try:
-                packets = trap.return_packets_rev()
+                _packets = trap.return_packets_rev()
                 biflow = True
-            except AttributeError as e:
+            except AttributeError:
                 biflow = False
 
         data_aggregation(data_table, interval, trap, networks, biflow)
 
     # receive finished, put everything in the queue to send
-    for time in list(sorted(data_table.keys())):
+    for time in sorted(data_table.keys()):
         queue.put((time, data_table[time]), block=True)
 
     # signal for thread to end
@@ -341,57 +374,74 @@ def input_processing(trap: TrapIfc, interval, src_tag, maxage, networks):
 
 def replace_traphelp_in_argv(args):
     if args.traphelp:
-        argv.remove('--traphelp')
-        argv.extend(['-h', 'trap'])
+        argv.remove("--traphelp")
+        argv.extend(["-h", "trap"])
 
 
 def parse_arguments():
     parser = ArgumentParser(
-        description='ADiCT input module. Collect input flows, aggregate and send them '
-                    'as IP Activity intervals to the trap interface. '
-                    'JSON formatted datapoints are sent to output Trap IFC.')
-
-    parser.add_argument('--traphelp', help='display help for Trap IFC', action='store_true')
-
-    parser.add_argument(
-        '-i',
-        help=('specification of interface types and their parameters, see '
-              '"--traphelp" (mandatory parameter)'),
-        type=str,
-        metavar="IFC_SPEC"
+        description="ADiCT input module. Collect input flows, aggregate and send them "
+        "as IP Activity intervals to the trap interface. "
+        "JSON formatted datapoints are sent to output Trap IFC."
     )
 
     parser.add_argument(
-        '--interval', '-I',
-        help=('Length of one time interval, in which flow records will be aggregated, in seconds. '
-              '(default: 10 min).'),
+        "--traphelp", help="display help for Trap IFC", action="store_true"
+    )
+
+    parser.add_argument(
+        "-i",
+        help=(
+            "specification of interface types and their parameters, see "
+            '"--traphelp" (mandatory parameter)'
+        ),
+        type=str,
+        metavar="IFC_SPEC",
+    )
+
+    parser.add_argument(
+        "--interval",
+        "-I",
+        help=(
+            "Length of one time interval, in which flow records will be aggregated, "
+            "in seconds. (default: 10 min)."
+        ),
         type=int,
         default=600,
-        metavar="SECONDS"
+        metavar="SECONDS",
     )
 
     parser.add_argument(
-        '-m', '--maxage', help=('Max possible age of incoming data (in seconds). Data of time intervals older this '
-                                'are sent and deleted (default: 20min).'),
+        "-m",
+        "--maxage",
+        help=(
+            "Max possible age of incoming data (in seconds). Data of time intervals "
+            "older than this are sent and deleted (default: 20min)."
+        ),
         type=int,
         default=1200,
-        metavar="SECONDS"
+        metavar="SECONDS",
     )
 
-    parser.add_argument('-s', help='Source tag', type=str, default="", metavar="SRC_TAG")
+    parser.add_argument(
+        "-s", help="Source tag", type=str, default="", metavar="SRC_TAG"
+    )
 
     parser.add_argument(
         "-N",
         "--networks",
-        help=('IP networks (in CIDR format) to monitor. Only data of IPs from these networks will be included. '
-              'Multiple networks can be separated by commas or spaces (quote the whole list in that case). '
-              'If not set, all IPs are included.'),
+        help=(
+            "IP networks (in CIDR format) to monitor. Only data of IPs from these "
+            "networks will be included. Multiple networks can be separated by commas "
+            "or spaces (quote the whole list in that case). "
+            "If not set, all IPs are included."
+        ),
         type=str,
         metavar="IPs",
         default="",
     )
 
-    parser.add_argument('-v', '--verbose', help='Verbose mode', action='store_true')
+    parser.add_argument("-v", "--verbose", help="Verbose mode", action="store_true")
 
     arg = parser.parse_args()
 
@@ -400,7 +450,7 @@ def parse_arguments():
         sys.exit(1)
 
     if arg.networks:
-        arg.networks = arg.networks.replace(',', ' ').split()
+        arg.networks = arg.networks.replace(",", " ").split()
         for net in arg.networks:
             try:
                 ipaddress.ip_network(net)
@@ -412,7 +462,7 @@ def parse_arguments():
 
 
 def main(inputspec):
-    global verbose
+    global verbose  # noqa PLW0603
     args = parse_arguments()
     replace_traphelp_in_argv(args)
     trap = TrapIfc(inputspec)
@@ -420,10 +470,13 @@ def main(inputspec):
     verbose = args.verbose  # set global verbose flag
 
     if verbose:
-        print("Watching IPs from networks:", ", ".join(map(lambda n: str(ipaddress.ip_network(n)), args.networks)))
+        print(
+            "Watching IPs from networks:",
+            ", ".join(str(ipaddress.ip_network(n) for n in args.networks)),
+        )
 
     # precalculating networks and masks for faster ip filtering
-    networks = list()
+    networks = []
     for net in args.networks:
         n = ipaddress.ip_network(net)
         network = int(n.network_address)
