@@ -74,15 +74,18 @@ async function load() {
     }
   }
 
+  const params = {
+    skip: (page.value - 1) * itemsPerPage,
+    limit: itemsPerPage,
+    fulltext_filters: JSON.stringify(validFulltextFilters),
+    generic_filter: JSON.stringify(validGenericFilters),
+  }
+
   // Fetch items
-  let data = await getData(props.url, {
-    params: {
-      skip: (page.value - 1) * itemsPerPage,
-      limit: itemsPerPage,
-      fulltext_filters: JSON.stringify(validFulltextFilters),
-      generic_filter: JSON.stringify(validGenericFilters),
-    },
-  })
+  const [data, dataCount] = await Promise.all([
+    getData(props.url + '/get', { params }),
+    getData(props.url + '/count', { params }),
+  ])
 
   if (data === undefined) {
     return
@@ -90,7 +93,7 @@ async function load() {
 
   // Populate variables
   items.value = data.data
-  pageCount.value = Math.ceil(data.total_count / itemsPerPage)
+  pageCount.value = Math.ceil(dataCount.total_count / itemsPerPage)
   timeCreated.value = data.time_created ? dayjs.utc(data.time_created).local() : null
 }
 
