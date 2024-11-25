@@ -1,25 +1,49 @@
 #!/usr/bin/env python3
 
-import pytrap
-import sys
 import json
-import requests
+import sys
 from argparse import ArgumentParser
 
+import pytrap
+import requests
 
-parser = ArgumentParser(description="Receive ADiCT data-points as JSON messages on TRAP interface and send them via "
-                                    "HTTP API to ADiCT server (or print to stdout if no URL is specified)."
-                                    "A JSON-encoded list of objects (data-points) is expected on input.")
-parser.add_argument("-i", "--ifcspec", metavar="IFCSPEC",
-                    help="See https://nemea.liberouter.org/trap-ifcspec/")
-parser.add_argument("-u", "--url", metavar="url",
-                    help="Base URL of ADiCT server, e.g. http://example.com/adict/ (print data-points to stdout if not specified)")
-parser.add_argument("-s", "--src", dest="src", metavar="SRC",
-                    help="Name of this data source (add or overwrite the 'src' field in datapoints sent)")
-parser.add_argument("-I", "--indent", metavar="N", type=int,
-                    help="When writing to stdout, pretty-print JSON with indentation set to N spaces.")
-parser.add_argument("-v", "--verbose", action="store_true",
-                    help="Set verbose mode - print messages.")
+parser = ArgumentParser(
+    description="Receive ADiCT data-points as JSON messages on TRAP interface "
+    "and send them via HTTP API to ADiCT server "
+    "(or print to stdout if no URL is specified)."
+    "A JSON-encoded list of objects (data-points) is expected on input."
+)
+parser.add_argument(
+    "-i",
+    "--ifcspec",
+    metavar="IFCSPEC",
+    help="See https://nemea.liberouter.org/trap-ifcspec/",
+)
+parser.add_argument(
+    "-u",
+    "--url",
+    metavar="url",
+    help="Base URL of ADiCT server, e.g. http://example.com/adict/ "
+    "(print data-points to stdout if not specified)",
+)
+parser.add_argument(
+    "-s",
+    "--src",
+    dest="src",
+    metavar="SRC",
+    help="Name of this data source "
+    "(add or overwrite the 'src' field in datapoints sent)",
+)
+parser.add_argument(
+    "-I",
+    "--indent",
+    metavar="N",
+    type=int,
+    help="When writing to stdout, pretty-print JSON with indentation set to N spaces.",
+)
+parser.add_argument(
+    "-v", "--verbose", action="store_true", help="Set verbose mode - print messages."
+)
 
 args = parser.parse_args()
 
@@ -32,7 +56,7 @@ if url and not url.endswith("/datapoints"):
         url += "/datapoints"
 
 trap = pytrap.TrapCtx()
-trap.init(["-i", args.ifcspec], 1, 0,)		# ifc spec
+trap.init(["-i", args.ifcspec], 1, 0)  # ifc spec
 trap.setRequiredFmt(0, pytrap.FMT_JSON, "")
 
 stop = False
@@ -42,13 +66,16 @@ while not stop:
     try:
         data = trap.recv()
     except pytrap.FormatMismatch:
-        print("Error: output and input interfaces data type or format mismatch", file=sys.stderr)
+        print(
+            "Error: output and input interfaces data type or format mismatch",
+            file=sys.stderr,
+        )
         break
     except pytrap.FormatChanged as e:
         if args.verbose:
             print("Incoming TRAP data format:", trap.getDataFmt(0))
         data = e.data
-        del(e)
+        del e
         pass
     except (pytrap.Terminated, KeyboardInterrupt):
         break
@@ -67,8 +94,13 @@ while not stop:
         continue
 
     # Check format - must be a list of objects
-    if type(rec_list) != list or any(type(rec) != dict for rec in rec_list):
-        print("ERROR: Invalid format of incoming data, must be a list of objects.", file=sys.stderr)
+    if not isinstance(rec_list, list) or any(
+        not isinstance(rec, dict) for rec in rec_list
+    ):
+        print(
+            "ERROR: Invalid format of incoming data, must be a list of objects.",
+            file=sys.stderr,
+        )
         continue
 
     # Add "src" tag
@@ -89,6 +121,7 @@ while not stop:
             print(f"ERROR in HTTP POST request: {e}", file=sys.stderr)
             continue
         if args.verbose:
-            print(f"Response: ({resp.status_code}) {resp.text[:1000]}") # print max 1000 chars of response
+            # print max 1000 chars of response
+            print(f"Response: ({resp.status_code}) {resp.text[:1000]}")
 
 trap.finalize()
