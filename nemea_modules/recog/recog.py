@@ -1,27 +1,52 @@
 #!/usr/bin/env python3
 
-import pytrap
-import sys
 import json
 import re
-from datetime import datetime
-from argparse import ArgumentParser
+import sys
 import xml.etree.ElementTree as ET
-from typing import Callable, Tuple, List
+from argparse import ArgumentParser
+from datetime import datetime
+from typing import Callable
 
-SSH_BANNER_REGEX = re.compile(r'^SSH-\d+\.\d+-') # e.g. "SSH-2.0-"
+import pytrap
+
+SSH_BANNER_REGEX = re.compile(r"^SSH-\d+\.\d+-")  # e.g. "SSH-2.0-"
 SUPPORTED_POS_CATEGORIES = ["openssh", "service", "host", "os"]
 
-parser = ArgumentParser(description="Receive SSH or SMTP banners and according to given database of known banners determine type of device or operating system "
-                                    "and send it in ADiCT data point format in JSON to ADiCT server")
+parser = ArgumentParser(
+    description="Receive SSH or SMTP banners and according to given database "
+    "of known banners determine type of device or operating system "
+    "and send it in ADiCT data point format in JSON to ADiCT server"
+)
 
-parser.add_argument("-i", "--ifcspec", metavar="IFCSPEC", required=True,
-                    help="See https://nemea.liberouter.org/trap-ifcspec/")
-parser.add_argument("-d", metavar="DB_PATH", dest="db_path", required=True,
-                    help="Path to database (xml file) with ssh/smtp banners")
-parser.add_argument("-m", metavar="MODE", choices=['smtp', 'ssh', 'server', 'setcookie'], dest="mode", required=True,
-                    help="Mode of detector 4 options: 'smtp', 'ssh', 'server' or 'setcookie'")
-parser.add_argument("-v", "--verbose", action="store_true", help="Print all banners and their matching information to stdout.")
+parser.add_argument(
+    "-i",
+    "--ifcspec",
+    metavar="IFCSPEC",
+    required=True,
+    help="See https://nemea.liberouter.org/trap-ifcspec/",
+)
+parser.add_argument(
+    "-d",
+    metavar="DB_PATH",
+    dest="db_path",
+    required=True,
+    help="Path to database (xml file) with ssh/smtp banners",
+)
+parser.add_argument(
+    "-m",
+    metavar="MODE",
+    choices=["smtp", "ssh", "server", "setcookie"],
+    dest="mode",
+    required=True,
+    help="Mode of detector 4 options: 'smtp', 'ssh', 'server' or 'setcookie'",
+)
+parser.add_argument(
+    "-v",
+    "--verbose",
+    action="store_true",
+    help="Print all banners and their matching information to stdout.",
+)
 args = parser.parse_args()
 path = args.db_path
 mode = args.mode
@@ -30,9 +55,9 @@ trap = pytrap.TrapCtx()
 try:
     trap.init(["-i", args.ifcspec], 1, 1)
 except pytrap.TrapError as e:
-    print(f'PyTrap: {e}', file=sys.stderr)
+    print(f"PyTrap: {e}", file=sys.stderr)
     sys.exit(1)
-    
+
 # Load the XML file
 try:
     tree = ET.parse(path)
@@ -46,9 +71,9 @@ pattern_regex = []
 # Create a dictionary to store the fingerprints
 fingerprints = {}
 # Iterate over each fingerprint element
-for fingerprint in root.iter('fingerprint'):
+for fingerprint in root.iter("fingerprint"):
     # Extract the pattern attribute value as the dictionary key
-    pattern = fingerprint.get('pattern')
+    pattern = fingerprint.get("pattern")
 
     # Create a dictionary to store the fingerprint parameters
     os = {}
@@ -59,15 +84,15 @@ for fingerprint in root.iter('fingerprint'):
     position = {}
 
     # Iterate over each param element
-    for param in fingerprint.iter('param'):
+    for param in fingerprint.iter("param"):
         # Extract the name and value attributes
-        pos = param.get('pos')
-        name = param.get('name')
-        value = param.get('value')
+        pos = param.get("pos")
+        name = param.get("name")
+        value = param.get("value")
 
         pos = int(pos)
         if name != "cookie":
-            category, item = name.split('.',1)
+            category, item = name.split(".", 1)
         if (value is None) and (pos == 0):
             continue
         if category == "os":
@@ -109,26 +134,27 @@ compiled_patterns = [re.compile(pattern) for pattern in pattern_regex]
 
 def sanitize_banner(banner: str) -> str:
     """Replace non-printable characters by '·' (for verbose prints)"""
-    return ''.join(c if c.isprintable() else '·' for c in banner)
+    return "".join(c if c.isprintable() else "·" for c in banner)
 
 
 def create_datapoint(rec: pytrap.UnirecTemplate, data: dict, mode: str, ip: str) -> str:
     tmpdic = {
-            "type": "ip",
-            "id": ip,
-            "attr": mode,
-            "v": data,
-            "t1": datetime.isoformat((rec.TIME_FIRST).toDatetime()),
-            "t2": datetime.isoformat((rec.TIME_LAST).toDatetime()),
-            "src": "",
+        "type": "ip",
+        "id": ip,
+        "attr": mode,
+        "v": data,
+        "t1": datetime.isoformat((rec.TIME_FIRST).toDatetime()),
+        "t2": datetime.isoformat((rec.TIME_LAST).toDatetime()),
+        "src": "",
     }
     datapoint = json.dumps([tmpdic])
     return datapoint
 
-def ssh_extract_banners(rec: pytrap.UnirecTemplate) -> Tuple[str,str]:
+
+def ssh_extract_banners(rec: pytrap.UnirecTemplate) -> tuple[list[str], str]:
     content = rec.IDP_CONTENT_REV
     try:
-        content = content.decode('utf-8').strip()
+        content = content.decode("utf-8").strip()
     except UnicodeDecodeError:
         return "", ""
 
@@ -138,16 +164,17 @@ def ssh_extract_banners(rec: pytrap.UnirecTemplate) -> Tuple[str,str]:
     if not SSH_BANNER_REGEX.match(content):
         if verbose:
             print("-> UNEXPECTED BANNER FORMAT")
-        return "", "" # not an expected content ("SSH-x.y-")
+        return "", ""  # not an expected content ("SSH-x.y-")
 
     # remove header of SSH version ("SSH-x.y-")
-    content = content.split('-',2)[2]
+    content = content.split("-", 2)[2]
     return [content], str(rec.DST_IP)
 
-def smtp_extract_banners(rec: pytrap.UnirecTemplate) -> Tuple[str,str]:
+
+def smtp_extract_banners(rec: pytrap.UnirecTemplate) -> tuple[list[str], str]:
     content = rec.IDP_CONTENT_REV
     try:
-        content = content.decode('utf-8').strip()
+        content = content.decode("utf-8").strip()
     except UnicodeDecodeError:
         return "", ""
 
@@ -157,26 +184,29 @@ def smtp_extract_banners(rec: pytrap.UnirecTemplate) -> Tuple[str,str]:
     if not content.startswith("220 "):
         if verbose:
             print("-> UNEXPECTED BANNER FORMAT")
-        return "", "" # not an expected content
+        return "", ""  # not an expected content
 
     # remove the code ("220 ") from the beginning of the content
     content = content[4:]
     return [content], str(rec.DST_IP)
 
-def http_server_extract_banners(rec: pytrap.UnirecTemplate) -> Tuple[str,str]:
+
+def http_server_extract_banners(rec: pytrap.UnirecTemplate) -> tuple[list[str], str]:
     try:
         server = rec.HTTP_RESPONSE_SERVER
     except UnicodeDecodeError:
         return "", ""
     return [server], str(rec.SRC_IP)
 
-def http_setcookie_extract_banners(rec: pytrap.UnirecTemplate) -> Tuple[List[str],str]:
-    cookie_names = (rec.HTTP_RESPONSE_SET_COOKIE_NAMES).split(';')
+
+def http_setcookie_extract_banners(rec: pytrap.UnirecTemplate) -> tuple[list[str], str]:
+    cookie_names = (rec.HTTP_RESPONSE_SET_COOKIE_NAMES).split(";")
     if cookie_names[0]:
         cookie = [name + "=" for name in cookie_names]
         cookie_names = cookie_names + cookie
         return cookie, str(rec.SRC_IP)
     return [""], ""
+
 
 def get_data(record: str):
     for patt in compiled_patterns:
@@ -188,12 +218,13 @@ def get_data(record: str):
 
             position = data.pop("position", False)
             if position:
-                # iterate through position dictionary and add to data dict information from regex match
+                # iterate through position dictionary
+                # and add to data dict information from regex match
                 for name, pos in position.items():
                     if name == "cookie":
                         continue
                     else:
-                        category, item = name.split('.',1)
+                        category, item = name.split(".", 1)
                     value = match.group(pos)
                     if value is None:
                         data[category].pop(item)
@@ -206,26 +237,34 @@ def get_data(record: str):
                     # replace part of cpe23 value with the obtained information
                     if name == "service.version":
                         if "cpe23" in data["service"]:
-                            data["service"]["cpe23"] = data["service"]["cpe23"].replace("{service.version}", value)
-                    elif name == "os.version":
-                        if "cpe23" in data["os"]:
-                            data["os"]["cpe23"] = data["os"]["cpe23"].replace("{os.version}", value)
+                            data["service"]["cpe23"] = data["service"]["cpe23"].replace(
+                                "{service.version}", value
+                            )
+                    elif name == "os.version" and "cpe23" in data["os"]:
+                        data["os"]["cpe23"] = data["os"]["cpe23"].replace(
+                            "{os.version}", value
+                        )
 
             return data
-            
+
     if verbose:
         print("-> UNKNOWN BANNER")
     return ""
 
 
-def do_detection(rec: pytrap.UnirecTemplate, extract_data: Callable, mode: str):
+def do_detection(
+    rec: pytrap.UnirecTemplate,
+    extract_data: Callable[[pytrap.UnirecTemplate], tuple[list[str], str]],
+    mode: str,
+):
     records, ip = extract_data(rec)
     if records:
         for record in records:
             data = get_data(record)
             if data:
                 datapoint = create_datapoint(rec, data, mode, ip)
-                trap.send(bytearray(datapoint, 'utf-8'))
+                trap.send(bytearray(datapoint, "utf-8"))
+
 
 # Set the list of required fields in received messages.
 if mode == "ssh":
@@ -236,17 +275,21 @@ elif mode == "smtp":
     inputspec = "ipaddr DST_IP,bytes IDP_CONTENT_REV,time TIME_FIRST,time TIME_LAST"
 elif mode == "server":
     extract_data = http_server_extract_banners
-    inputspec = "ipaddr SRC_IP,string HTTP_RESPONSE_SERVER,time TIME_FIRST,time TIME_LAST"
+    inputspec = (
+        "ipaddr SRC_IP,string HTTP_RESPONSE_SERVER,time TIME_FIRST,time TIME_LAST"
+    )
 else:
     extract_data = http_setcookie_extract_banners
-    inputspec = "ipaddr SRC_IP,string HTTP_RESPONSE_SET_COOKIE_NAMES,time TIME_FIRST,time TIME_LAST"
+    inputspec = (
+        "ipaddr SRC_IP,string HTTP_RESPONSE_SET_COOKIE_NAMES,"
+        "time TIME_FIRST,time TIME_LAST"
+    )
 
 trap.setRequiredFmt(0, pytrap.FMT_UNIREC, inputspec)
 rec = pytrap.UnirecTemplate(inputspec)
 trap.setDataFmt(0, pytrap.FMT_JSON, "adict_datapoint")
 
 mode = "recog_" + mode
-
 
 
 # Main loop
