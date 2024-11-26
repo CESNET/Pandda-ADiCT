@@ -6,7 +6,7 @@ import sys
 import xml.etree.ElementTree as ET
 from argparse import ArgumentParser
 from datetime import datetime
-from typing import Callable, Union
+from typing import Callable, Optional
 
 import pytrap
 
@@ -155,7 +155,7 @@ def create_datapoint(rec: pytrap.UnirecTemplate, data: dict, mode: str, ip: str)
 
 def ssh_extract_banners(
     rec: pytrap.UnirecTemplate,
-) -> Union[tuple[list[str], str], None]:
+) -> Optional[tuple[list[str], str]]:
     content = rec.IDP_CONTENT_REV
     try:
         content = content.decode("utf-8").strip()
@@ -177,7 +177,7 @@ def ssh_extract_banners(
 
 def smtp_extract_banners(
     rec: pytrap.UnirecTemplate,
-) -> Union[tuple[list[str], str], None]:
+) -> Optional[tuple[list[str], str]]:
     content = rec.IDP_CONTENT_REV
     try:
         content = content.decode("utf-8").strip()
@@ -199,7 +199,7 @@ def smtp_extract_banners(
 
 def http_server_extract_banners(
     rec: pytrap.UnirecTemplate,
-) -> Union[tuple[list[str], str], None]:
+) -> Optional[tuple[list[str], str]]:
     try:
         server = rec.HTTP_RESPONSE_SERVER
     except UnicodeDecodeError:
@@ -209,7 +209,7 @@ def http_server_extract_banners(
 
 def http_setcookie_extract_banners(
     rec: pytrap.UnirecTemplate,
-) -> Union[tuple[list[str], str], None]:
+) -> Optional[tuple[list[str], str]]:
     cookie_names = rec.HTTP_RESPONSE_SET_COOKIE_NAMES.split(";")
     if cookie_names[0]:
         cookie = [name + "=" for name in cookie_names]
@@ -218,7 +218,7 @@ def http_setcookie_extract_banners(
     return None
 
 
-def get_data(record: str):
+def get_data(record: str) -> Optional[dict]:
     for patt in compiled_patterns:
         match = patt.search(record)
         if match:
@@ -259,14 +259,14 @@ def get_data(record: str):
 
     if verbose:
         print("-> UNKNOWN BANNER")
-    return ""
+    return None
 
 
 def do_detection(
     rec: pytrap.UnirecTemplate,
-    extract_data: Callable[[pytrap.UnirecTemplate], Union[tuple[list[str], str], None]],
+    extract_data: Callable[[pytrap.UnirecTemplate], Optional[tuple[list[str], str]]],
     mode: str,
-):
+) -> None:
     result_or_none = extract_data(rec)
     if result_or_none is None:
         return
