@@ -1,4 +1,6 @@
 <script setup>
+import ActivityClassBadge from '@/components/ActivityClassBadge.vue'
+import OpenResolverBadge from '@/components/OpenResolverBadge.vue'
 import PaginatedListing from '@/components/PaginatedListing.vue'
 
 function parseBoolFilter(str) {
@@ -125,25 +127,10 @@ function parseBoolFilter(str) {
             </VTooltip>
           </td>
           <td>
-            <span v-if="row.activity_class == 'off'" class="badge bg-dark-subtle">
-              <i class="fa fa-power-off me-2" aria-hidden="true"></i>Off
-            </span>
-            <span v-else-if="row.activity_class == 'idle'" class="badge bg-dark-subtle">Idle</span>
-            <span v-else-if="row.activity_class == 'light'" class="badge bg-info text-dark"
-              >Light</span
-            >
-            <span v-else-if="row.activity_class == 'medium'" class="badge bg-warning text-dark"
-              >Medium</span
-            >
-            <span v-else-if="row.activity_class == 'high'" class="badge bg-danger">High</span>
+            <ActivityClassBadge :value="row.activity_class" />
           </td>
           <td>
-            <span v-if="row.open_resolver === true" class="badge bg-danger">
-              <i class="fa fa-exclamation-triangle me-2" aria-hidden="true"></i>Open
-            </span>
-            <span v-else-if="row.open_resolver === false" class="badge bg-secondary">
-              <i class="fa fa-check me-2" aria-hidden="true"></i>Closed
-            </span>
+            <OpenResolverBadge :value="row.open_resolver" />
           </td>
         </template>
       </PaginatedListing>
