@@ -34,6 +34,42 @@ const latestSnapshot = computed(() => {
 })
 
 /**
+ * Stringifies recog-attribute value
+ *
+ * Returns human-readable value for recog attribute value.
+ */
+function stringifyRecogValue(v) {
+  let service = 'unknown'
+  let os = 'unknown'
+
+  if (v.service) {
+    if (v.service.product && v.service.version) {
+      service = `${v.service.product} ${v.service.version}`
+    } else if (v.service.product) {
+      service = v.service.product
+    } else if (v.service.family) {
+      service = v.service.family
+    } else if (v.service.cpe23) {
+      service = v.service.cpe23
+    }
+  }
+
+  if (v.os) {
+    if (v.os.vendor) {
+      os = v.os.vendor
+    } else if (v.os.product) {
+      os = v.os.product
+    } else if (v.os.family) {
+      os = v.os.family
+    } else if (v.os.cpe23) {
+      os = v.os.cpe23
+    }
+  }
+
+  return `${service} @ ${os}`
+}
+
+/**
  * Replaces the route with current parameters
  */
 function replaceRoute() {
@@ -180,6 +216,46 @@ watch(dt, async () => {
               :activity="masterRecord.activity"
             />
             <div v-else class="alert alert-info">No data</div>
+          </div>
+          <div class="mb-3">
+            <h6>
+              Recog SSH
+              <VTooltip class="d-inline-block ms-2">
+                <i class="fa fa-info text-secondary"></i>
+                <template #popper>
+                  Service and operating system identifiers parsed from recog SSH attribute values.
+                </template>
+              </VTooltip>
+            </h6>
+            <ObservationsTimeline
+              v-if="snapshots.length > 0"
+              id="recog_ssh"
+              :snapshots="snapshots"
+              :latestSnapshot="latestSnapshot"
+              :isArrayType="true"
+              :valueMapper="stringifyRecogValue"
+            />
+            <div v-else class="alert alert-info">No snapshots</div>
+          </div>
+          <div class="mb-3">
+            <h6>
+              Recog SMTP
+              <VTooltip class="d-inline-block ms-2">
+                <i class="fa fa-info text-secondary"></i>
+                <template #popper>
+                  Service and operating system identifiers parsed from recog SMTP attribute values.
+                </template>
+              </VTooltip>
+            </h6>
+            <ObservationsTimeline
+              v-if="snapshots.length > 0"
+              id="recog_smtp"
+              :snapshots="snapshots"
+              :latestSnapshot="latestSnapshot"
+              :isArrayType="true"
+              :valueMapper="stringifyRecogValue"
+            />
+            <div v-else class="alert alert-info">No snapshots</div>
           </div>
         </div>
       </div>

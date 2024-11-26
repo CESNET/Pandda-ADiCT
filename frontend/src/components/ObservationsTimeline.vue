@@ -23,6 +23,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  valueMapper: {
+    type: Function,
+    default: (v) => `${v}`,
+  },
 })
 
 const chartOptions = computed(() => {
@@ -90,7 +94,7 @@ const chartData = computed(() => {
   const dataConv = (ts, value, confidence) => {
     return {
       x: ts,
-      y: `${value}`,
+      y: props.valueMapper(value),
       c: confidence,
     }
   }
