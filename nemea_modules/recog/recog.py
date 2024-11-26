@@ -93,6 +93,8 @@ for fingerprint in root.iter("fingerprint"):
         pos = int(pos)
         if name != "cookie":
             category, item = name.split(".", 1)
+        else:
+            continue
         if (value is None) and (pos == 0):
             continue
         if category == "os":
