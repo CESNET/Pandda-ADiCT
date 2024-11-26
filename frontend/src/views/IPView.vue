@@ -7,6 +7,7 @@ import utc from 'dayjs/plugin/utc'
 dayjs.extend(utc)
 
 import ActivityClassBadge from '@/components/ActivityClassBadge.vue'
+import ActivityTimeline from '@/components/ActivityTimeline.vue'
 import ObservationsTimeline from '@/components/ObservationsTimeline.vue'
 import OpenResolverBadge from '@/components/OpenResolverBadge.vue'
 import TimelineSelect from '@/components/TimelineSelect.vue'
@@ -18,6 +19,9 @@ const router = useRouter()
 const empty = ref(false)
 const loaded = ref(false)
 const dt = ref(route.query.dt)
+const dt_from = computed(() => {
+  return dayjs(dt.value).subtract(24, 'hour').format('YYYY-MM-DDTHH:mm')
+})
 
 const masterRecord = ref({})
 const snapshots = ref([])
@@ -47,7 +51,7 @@ async function load() {
   // Load IP detail
   const data = await getData('/entity/ip/' + route.params.eid, {
     params: {
-      date_from: dayjs(dt.value).subtract(24, 'hour').format('YYYY-MM-DDTHH:mm'),
+      date_from: dt_from.value,
       date_to: dt.value,
     },
   })
@@ -171,7 +175,10 @@ watch(dt, async () => {
           </div>
           <div class="mb-3">
             <h6>Activity</h6>
-            <div v-if="masterRecord.activity">TODO</div>
+            <ActivityTimeline
+              v-if="masterRecord.activity && masterRecord.activity.length > 0"
+              :activity="masterRecord.activity"
+            />
             <div v-else class="alert alert-info">No data</div>
           </div>
         </div>
