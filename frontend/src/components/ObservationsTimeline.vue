@@ -95,7 +95,6 @@ const chartData = computed(() => {
     }
   }
 
-  // Extract `Data` objects from all snapshots
   for (const s of props.snapshots) {
     // + 'Z' to treat as UTC
     const ts = new Date(s._time_created + 'Z')
@@ -143,10 +142,6 @@ const chartData = computed(() => {
 </template>
 
 <style lang="css" scoped>
-.toggle-button {
-  cursor: pointer;
-}
-
 .chart {
   height: 10rem;
 }
