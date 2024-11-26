@@ -1,12 +1,13 @@
 <script setup>
 import { computed, inject, onMounted, ref, watch } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 dayjs.extend(utc)
 
 import ActivityClassBadge from '@/components/ActivityClassBadge.vue'
+import ObservationsTimeline from '@/components/ObservationsTimeline.vue'
 import OpenResolverBadge from '@/components/OpenResolverBadge.vue'
 import TimelineSelect from '@/components/TimelineSelect.vue'
 
@@ -104,6 +105,7 @@ watch(dt, async () => {
               <div v-if="(latestSnapshot?.open_ports || []).length > 0">
                 <div
                   v-for="(port, i) in latestSnapshot?.open_ports.sort((a, b) => a - b)"
+                  v-bind:key="i"
                   class="mb-2"
                 >
                   <span class="badge bg-light text-dark fs-6">{{ port }}</span>
@@ -146,6 +148,31 @@ watch(dt, async () => {
               }}</pre>
               <div v-else class="alert alert-info">No data</div>
             </div>
+          </div>
+        </div>
+        <div>
+          <h4>
+            History
+            <VTooltip class="d-inline-block my-3">
+              <i class="fa fa-info text-secondary fs-5"></i>
+              <template #popper> 24-hour window until selected timestamp. </template>
+            </VTooltip>
+          </h4>
+          <div class="mb-3">
+            <h6>Open ports</h6>
+            <ObservationsTimeline
+              v-if="snapshots.length > 0"
+              id="open_ports"
+              :snapshots="snapshots"
+              :latestSnapshot="latestSnapshot"
+              :isArrayType="true"
+            />
+            <div v-else class="alert alert-info">No snapshots</div>
+          </div>
+          <div class="mb-3">
+            <h6>Activity</h6>
+            <div v-if="masterRecord.activity">TODO</div>
+            <div v-else class="alert alert-info">No data</div>
           </div>
         </div>
       </div>
