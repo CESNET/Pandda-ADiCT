@@ -6,7 +6,7 @@ import sys
 import xml.etree.ElementTree as ET
 from argparse import ArgumentParser
 from datetime import datetime
-from typing import Callable
+from typing import Callable, Union
 
 import pytrap
 
@@ -151,12 +151,14 @@ def create_datapoint(rec: pytrap.UnirecTemplate, data: dict, mode: str, ip: str)
     return datapoint
 
 
-def ssh_extract_banners(rec: pytrap.UnirecTemplate) -> tuple[list[str], str]:
+def ssh_extract_banners(
+    rec: pytrap.UnirecTemplate,
+) -> Union[tuple[list[str], str], None]:
     content = rec.IDP_CONTENT_REV
     try:
         content = content.decode("utf-8").strip()
     except UnicodeDecodeError:
-        return "", ""
+        return None
 
     if verbose:
         print(sanitize_banner(content))
@@ -164,19 +166,21 @@ def ssh_extract_banners(rec: pytrap.UnirecTemplate) -> tuple[list[str], str]:
     if not SSH_BANNER_REGEX.match(content):
         if verbose:
             print("-> UNEXPECTED BANNER FORMAT")
-        return "", ""  # not an expected content ("SSH-x.y-")
+        return None  # not an expected content ("SSH-x.y-")
 
     # remove header of SSH version ("SSH-x.y-")
     content = content.split("-", 2)[2]
     return [content], str(rec.DST_IP)
 
 
-def smtp_extract_banners(rec: pytrap.UnirecTemplate) -> tuple[list[str], str]:
+def smtp_extract_banners(
+    rec: pytrap.UnirecTemplate,
+) -> Union[tuple[list[str], str], None]:
     content = rec.IDP_CONTENT_REV
     try:
         content = content.decode("utf-8").strip()
     except UnicodeDecodeError:
-        return "", ""
+        return None
 
     if verbose:
         print("banner:", sanitize_banner(content))
@@ -184,28 +188,32 @@ def smtp_extract_banners(rec: pytrap.UnirecTemplate) -> tuple[list[str], str]:
     if not content.startswith("220 "):
         if verbose:
             print("-> UNEXPECTED BANNER FORMAT")
-        return "", ""  # not an expected content
+        return None  # not an expected content
 
     # remove the code ("220 ") from the beginning of the content
     content = content[4:]
     return [content], str(rec.DST_IP)
 
 
-def http_server_extract_banners(rec: pytrap.UnirecTemplate) -> tuple[list[str], str]:
+def http_server_extract_banners(
+    rec: pytrap.UnirecTemplate,
+) -> Union[tuple[list[str], str], None]:
     try:
         server = rec.HTTP_RESPONSE_SERVER
     except UnicodeDecodeError:
-        return "", ""
+        return None
     return [server], str(rec.SRC_IP)
 
 
-def http_setcookie_extract_banners(rec: pytrap.UnirecTemplate) -> tuple[list[str], str]:
-    cookie_names = (rec.HTTP_RESPONSE_SET_COOKIE_NAMES).split(";")
+def http_setcookie_extract_banners(
+    rec: pytrap.UnirecTemplate,
+) -> Union[tuple[list[str], str], None]:
+    cookie_names = rec.HTTP_RESPONSE_SET_COOKIE_NAMES.split(";")
     if cookie_names[0]:
         cookie = [name + "=" for name in cookie_names]
         cookie_names = cookie_names + cookie
         return cookie, str(rec.SRC_IP)
-    return [""], ""
+    return None
 
 
 def get_data(record: str):
@@ -254,16 +262,18 @@ def get_data(record: str):
 
 def do_detection(
     rec: pytrap.UnirecTemplate,
-    extract_data: Callable[[pytrap.UnirecTemplate], tuple[list[str], str]],
+    extract_data: Callable[[pytrap.UnirecTemplate], Union[tuple[list[str], str], None]],
     mode: str,
 ):
-    records, ip = extract_data(rec)
-    if records:
-        for record in records:
-            data = get_data(record)
-            if data:
-                datapoint = create_datapoint(rec, data, mode, ip)
-                trap.send(bytearray(datapoint, "utf-8"))
+    result_or_none = extract_data(rec)
+    if result_or_none is None:
+        return
+    records, ip = result_or_none
+    for record in records:
+        data = get_data(record)
+        if data:
+            datapoint = create_datapoint(rec, data, mode, ip)
+            trap.send(bytearray(datapoint, "utf-8"))
 
 
 # Set the list of required fields in received messages.
