@@ -1,14 +1,16 @@
 #!/usr/bin/python3
 """
-Analyze IP flows to get information about open ports on each IP address. This information is periodically sent to ADiCT server.
+Analyze IP flows to get information about open ports on each IP address.
+This information is periodically sent to ADiCT server.
 
-The open ports are detected simply by observing successfully established TCP connections, i.e. pairs of SYN and SYN+ACK
-packets.
-When bi-flow are available, each bi-flow with non-zero packets in each direction and both SYN and ACK flags set is
-used to mark the DST_PORT as open on DST_IP.
+The open ports are detected simply by observing successfully established
+TCP connections, i.e. pairs of SYN and SYN+ACK packets.
+When bi-flow are available, each bi-flow with non-zero packets in each direction
+and both SYN and ACK flags set is used to mark the DST_PORT as open on DST_IP.
 For uni-flows, the pairing is done in the module. ...
 
-The module accepts a list of IP prefixes to monitor. Only ports on those IP addresses are considered and sent to ADiCT.
+The module accepts a list of IP prefixes to monitor.
+Only ports on those IP addresses are considered and sent to ADiCT.
 
 ----------------------------------------------------------------
 Author: Josef Koumar <koumajos@fit.cvut.cz>
@@ -18,38 +20,58 @@ Copyright (C) 2022-2023 CESNET
 
 LICENSE TERMS
 
-Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-    1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
-    2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
-    3. Neither the name of the Company nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+    1. Redistributions of source code must retain the above copyright notice,
+       this list of conditions and the following disclaimer.
+    2. Redistributions in binary form must reproduce the above copyright notice,
+       this list of conditions and the following disclaimer in the documentation
+       and/or other materials provided with the distribution.
+    3. Neither the name of the Company nor the names of its contributors may be used
+       to endorse or promote products derived from this software
+       without specific prior written permission.
 
-ALTERNATIVELY, provided that this notice is retained in full, this product may be distributed under the terms of the GNU General Public License (GPL) version 2 or later, in which case the provisions of the GPL apply INSTEAD OF those given above.
+ALTERNATIVELY, provided that this notice is retained in full,
+this product may be distributed under the terms of the GNU General Public License (GPL)
+version 2 or later, in which case the provisions of the GPL apply INSTEAD OF those
+given above.
 
-This software is provided "as is", and any express or implied warranties, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose are disclaimed. In no event shall the company or contributors be liable for any direct, indirect, incidental, special, exemplary, or consequential damages (including, but not limited to, procurement of substitute goods or services; loss of use, data, or profits; or business interruption) however caused and on any theory of liability, whether in contract, strict liability, or tort (including negligence or otherwise) arising in any way out of the use of this software, even if advised of the possibility of such damage.
+This software is provided "as is", and any express or implied warranties, including,
+but not limited to, the implied warranties of merchantability and fitness for
+a particular purpose are disclaimed. In no event shall the company or contributors
+be liable for any direct, indirect, incidental, special, exemplary, or consequential
+damages (including, but not limited to, procurement of substitute goods or services;
+loss of use, data, or profits; or business interruption) however caused and on any
+theory of liability, whether in contract, strict liability, or tort (including
+negligence or otherwise) arising in any way out of the use of this software,
+even if advised of the possibility of such damage.
 """
+
 import _io
-import ipaddress
-# Standard libraries imports
-import os
-import sys
-import csv
-import threading
-import time
-from datetime import datetime
 import argparse
-from argparse import FileType
+
+# Standard libraries imports
 import re
-from collections import namedtuple
-from threading import Thread, Lock, Event
 import signal
+import sys
+import time
+from argparse import FileType
+from collections import namedtuple
+from collections.abc import Iterable, Iterator
+from datetime import datetime
+from functools import partial
 from itertools import islice
-from typing import Optional, Iterable, Callable, Union, Iterator
+from threading import Event, Lock, Thread
+from typing import Callable, Optional
+
+# NEMEA system library
+import pytrap
 
 # Third party imports
 import requests
 
-# NEMEA system library
-import pytrap
+# Ignore global variable usage
+# ruff: noqa: PLW0603
 
 # output datapoint fields
 TYPE = "ip"
@@ -58,75 +80,104 @@ HTTP_REQUEST_TIMEOUT = 10  # seconds
 DATAPOINTS_PER_REQUEST = 500
 
 # Global variables
-biflow_support = None # are bidirectional flows supported according to input unirec template?
+# are bidirectional flows supported according to input unirec template?
+biflow_support = None
 
-net_filter = lambda x: True
+found_open_ports = {}  # dict (ip,port)->(time_first,time_last,number_of_connections)
+# data sending is done by a separate thread, lock is needed to avoid race conditions
+found_open_ports_lock = Lock()
 
-found_open_ports = {} # dict (ip,port)->(time_first,time_last,number_of_connections)
-found_open_ports_lock = Lock() # data sending is done by a separate thread, lock is needed to avoid race conditions
-
-stop = Event() # a flag to signalize the program should stop (stops the sending thread)
+stop = Event()  # a flag to signalize the program should stop (stops the sending thread)
 
 # A class (namedtuple) for simplified flow/biflow
-Biflow = namedtuple("Biflow", "srcip, srcport, dstip, dstport, time_first, time_last, tcp_flags")
+Biflow = namedtuple(
+    "Biflow", "srcip, srcport, dstip, dstport, time_first, time_last, tcp_flags"
+)
 
 
-dbgprint = lambda x: print(f"[{datetime.now().isoformat()}]", x, file=sys.stderr, flush=True)
-#dbgprint = lambda x: None
+def dbgprint(x):
+    print(f"[{datetime.now().isoformat()}]", x, file=sys.stderr, flush=True)
+
+
+def net_filter_true(ip):
+    """Always return True, i.e. don't filter anything."""
+    return True
+
+
+def net_filter_networks(ip, networks_to_watch):
+    """Return True if the given IP belongs to any of the monitored networks."""
+    return any(ip in net for net in networks_to_watch)
+
+
+net_filter = net_filter_true  # default filter function
 
 
 # How does it work:
 # For bi-flows with both sides filled (at least one packet in each direction):
-#   If it's TCP and TCP_FLAGS contain both SYN and ACK (and not RST), simply mark DST_PORT on DST_IP as open.
+#   If it's TCP and TCP_FLAGS contain both SYN and ACK (and not RST),
+#   simply mark DST_PORT on DST_IP as open.
 # For uni-directional flows:
-#   We must try to pair both directions of the connection (the two flows may come in any order, but should arrive soon after each other).
+#   We must try to pair both directions of the connection
+#   (the two flows may come in any order, but should arrive soon after each other).
 #   A temporary store (dict) is used to cache info about uni-dir flows:
 #
 #   - Search for reverse key [dst-src] in cache
 #     - Found:
 #       - The other direction was already observed, pair them together.
-#       - Create a bi-flow, select the direction by comparing TIME_FIRST of the current and cached flow.
-#       - Continue as with bi-flow (apply IP and Port filters, if passed, mark DST_PORT on DST_IP as open)
+#       - Create a bi-flow, select the direction by comparing TIME_FIRST of the current
+#         and cached flow.
+#       - Continue as with bi-flow (apply IP and Port filters, if passed,
+#         mark DST_PORT on DST_IP as open)
 #       - Remove the record from the cache
 #     - Not found:
 #       - The other direction wasn't observed, yet. Store to cache.
 #       - Store key [src-dst] to the cache, together with TIME_FIRST and TCP_FLAGS
-#         (if this key was already there, overwrite it - a flow with the same key shouldn't arrive short after the previous one, so it's probably an old record for which we won't get the other direction anyway)
+#         (if this key was already there, overwrite it - a flow with the same key
+#         shouldn't arrive short after the previous one, so it's probably an old record
+#         for which we won't get the other direction anyway)
 #
-# Note that even if bi-flows are supported, some bidirectional communication can still be exported as two unidirectional flows.
-
+# Note that even if bi-flows are supported,
+# some bidirectional communication can still be exported as two unidirectional flows.
 
 
 class BiflowAggregator:
     def __init__(self):
-        self._cache = {} # map (srcip,srcport,dstip,dstport)->(time_first,time_last,tcp_flags)
-        self._prev_cache = {} # cache from previous time window (used only to look up flows, new ones are written to _cache)
+        # map (srcip,srcport,dstip,dstport)->(time_first,time_last,tcp_flags)
+        self._cache = {}
+        # cache from previous time window
+        # (used only to look up flows, new ones are written to _cache)
+        self._prev_cache = {}
 
     def rotate_cache(self):
         """Clear the current cache (should be called every few minutes)"""
-        # The current cache is backed up, and flows are always searched for in both the current and the previous cache.
-        # IMPORTANT: Although this is called from a separate thread, locking is not necessary. Cache rotation can occur
-        #            anywhere in process_flow() without any unexpected consequences.
-        #            JUST BE CAREFUL WITH ANY FUTURE MODIFICATIONS, ALWAYS RE-THINK IF LOCKING IS STILL NOT NEEDED.
-        #dbgprint(f"(agg) Cache rotation")
+        # The current cache is backed up, and flows are always searched for in both
+        # the current and the previous cache.
+
+        # IMPORTANT: Although this is called from a separate thread, locking is not
+        # necessary. Cache rotation can occur anywhere in process_flow() without any
+        # unexpected consequences. JUST BE CAREFUL WITH ANY FUTURE MODIFICATIONS,
+        # ALWAYS RE-THINK IF LOCKING IS STILL NOT NEEDED.
         self._prev_cache = self._cache
         self._cache = {}
 
     def cache_rotation_thread(self, interval: int):
-        """Helper function to be run as a separate (daemon) thread, rotates cache every 'interval' seconds"""
+        """Helper function to be run as a separate (daemon) thread, rotates cache
+        every 'interval' seconds"""
         next_rotation_time = time.time() + interval
         while True:
             time.sleep(next_rotation_time - time.time())
             self.rotate_cache()
             next_rotation_time += interval
 
-
     def process_flow(self, rec: pytrap.UnirecTemplate) -> Optional[Biflow]:
-        """Try to aggregate a flow with the corresponding cached one in the other direction, if any.
+        """Try to aggregate a flow with the corresponding cached one in the other
+        direction, if any.
 
         Return the aggregated bi-flow or None.
 
-        Returned bi-flow is a tuple: (srcip, srcport, dstip, dstport, time_first, time_last, tcp_flags)
+        Returned bi-flow is a tuple: (
+            srcip, srcport, dstip, dstport, time_first, time_last, tcp_flags
+        )
         """
         srcip = rec.SRC_IP
         srcport = rec.SRC_PORT
@@ -135,46 +186,63 @@ class BiflowAggregator:
         time_first = rec.TIME_FIRST
         time_last = rec.TIME_LAST
         tcp_flags = rec.TCP_FLAGS
-        # Look if the dst->src flow was already observed (if it is there, we'll process it and won't need anymore - use pop())
+        # Look if the dst->src flow was already observed
+        # (if it is there, we'll process it and won't need anymore - use pop())
         rev_key = (dstip, dstport, srcip, srcport)
-        reverse_flow = self._cache.pop(rev_key, None) or self._prev_cache.pop(rev_key, None)
+        reverse_flow = self._cache.pop(rev_key, None) or self._prev_cache.pop(
+            rev_key, None
+        )
         if reverse_flow is not None:
-            # The dst->src flow was already observed, pair them together into a bidir flow
-            #dbgprint("(agg) Other direction found, merging to biflow")
+            # The dst->src flow was already observed, pair them together into
+            # a bidirectional flow
             c_time_first, c_time_last, c_tcp_flags = reverse_flow
-            # TODO: Also look for SYN flag - if not present it is likely a continuation, so it's not possible to infer the direction from timestamps !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            #    It could be implemented as one of the first filters, when a flow is recevied.
+            # TODO: Also look for SYN flag - if not present it is likely a continuation,
+            #  so it's not possible to infer the direction from timestamps !!!!!!!!!!!!
+            #  It could be implemented as one of the first filters,
+            #  when a flow is received.
             if time_first < c_time_first:
-                # the current flow was first, its SRC IP initiated the connection, so it's SRC of bidir flow
-                aggregated_flow = Biflow(srcip, srcport, dstip, dstport, min(time_first,c_time_first), max(time_last,c_time_last), tcp_flags | c_tcp_flags)
+                # the current flow was first, its SRC IP initiated the connection,
+                # so it's SRC of bidir flow
+                aggregated_flow = Biflow(
+                    srcip,
+                    srcport,
+                    dstip,
+                    dstport,
+                    min(time_first, c_time_first),
+                    max(time_last, c_time_last),
+                    tcp_flags | c_tcp_flags,
+                )
             else:
                 # the cached flow was first, reverse the IP addresses
-                aggregated_flow = Biflow(dstip, dstport, srcip, srcport, min(time_first,c_time_first), max(time_last,c_time_last), tcp_flags | c_tcp_flags)
+                aggregated_flow = Biflow(
+                    dstip,
+                    dstport,
+                    srcip,
+                    srcport,
+                    min(time_first, c_time_first),
+                    max(time_last, c_time_last),
+                    tcp_flags | c_tcp_flags,
+                )
             return aggregated_flow
         else:
-            # Corresponding flow in the other direction wasn't observed, yet - cache this flow
-            # (If there already was a flow in the same direction, it's OK to overwrite. Flows with the same key
-            # shouldn't arrive short after each other, so it's probably just an old record for which we won't get the
-            #  other direction anyway.)
-            #dbgprint("(agg) Other direction not found, adding to cache")
+            # Corresponding flow in the other direction wasn't observed, yet - cache
+            # this flow (If there already was a flow in the same direction, it's OK
+            # to overwrite. Flows with the same key shouldn't arrive short after each
+            # other, so it's probably just an old record for which we won't get the
+            # other direction anyway.)
             fwd_key = (srcip, srcport, dstip, dstport)
             self._cache[fwd_key] = (time_first, time_last, tcp_flags)
             return None
 
 
-
 def process_biflow(biflow: Biflow):
-    """If biflow corresponds to a successful connection to the DST_IP/DST_PORT, mark it as open in 'found_open_ports' dictionary.
+    """If biflow corresponds to a successful connection to the DST_IP/DST_PORT,
+     mark it as open in 'found_open_ports' dictionary.
 
-    It assumes there was at least one open packet observed in eac direction (single-direction flows were filtered out
-    earlier).
+    It assumes there was at least one open packet observed in eac direction
+    (single-direction flows were filtered out earlier).
     """
-    global found_open_ports
-
-    #dbgprint(f"Processing biflow: {biflow}")
-
     if not net_filter(biflow.dstip):
-        #dbgprint("Biflow's DST_IP doesn't match net filter - skipped")
         return
 
     # TODO apply port filter
@@ -186,7 +254,6 @@ def process_biflow(biflow: Biflow):
         rec = found_open_ports.get(key)
         if rec is None:
             # not there yet, add new record
-            #dbgprint(f"New open port found: {key}")
             found_open_ports[key] = {
                 "t1": biflow.time_first,
                 "t2": biflow.time_last,
@@ -194,10 +261,9 @@ def process_biflow(biflow: Biflow):
             }
         else:
             # there already is a record with the same IP:port, update it
-            #dbgprint(f"Open port info updated: {key}")
-            rec['t1'] = min(rec['t1'], biflow.time_first)
-            rec['t2'] = max(rec['t2'], biflow.time_last)
-            rec['conns'] += 1
+            rec["t1"] = min(rec["t1"], biflow.time_first)
+            rec["t2"] = max(rec["t2"], biflow.time_last)
+            rec["conns"] += 1
 
 
 def batched(iterable: Iterable, n: int) -> Iterator[list]:
@@ -226,20 +292,25 @@ def post_datapoint_list(url: str, datapoints: list):
                 timeout=HTTP_REQUEST_TIMEOUT,
             )
         except requests.ConnectionError as e:
-            print(f"[{datetime.now().isoformat()}] Send failed due to ConnectionError: {e}", file=sys.stderr, flush=True)
+            dbgprint(f"Send failed due to ConnectionError: {e}")
             continue
         except requests.Timeout:
-            print(f"[{datetime.now().isoformat()}] Send failed due to timeout.", file=sys.stderr, flush=True)
+            dbgprint("Send failed due to timeout.")
             continue
 
         if resp.status_code == 200:
-            print(f"[{datetime.now().isoformat()}] {len(batch)} datapoints successfully sent.", file=sys.stderr, flush=True)
+            dbgprint(
+                f"{len(batch)} datapoints successfully sent.",
+            )
         else:
-            print(f"[{datetime.now().isoformat()}] Error when trying to send datapoints ({resp.status_code}): {resp.text}", file=sys.stderr, flush=True)
+            dbgprint(
+                f"Error when trying to send datapoints ({resp.status_code}): "
+                f"{resp.text}",
+            )
 
 
 def send_datapoints(url: str, srctag: str):
-    """Send data about open ports (in found_open_ports dict) as data-points to ADiCT server.
+    """Send data about open ports (in found_open_ports dict) as data-points.
 
     The found_open_ports dict is cleared after the data are send.
 
@@ -253,24 +324,29 @@ def send_datapoints(url: str, srctag: str):
         The URL to ADiCT server.
     """
     global found_open_ports
-    # Copy reference to the dict and replace it with a new one.
-    # A Lock is used to wait until the main thread finishes writing into found_open_ports, if any.
+    # Copy reference to the dict and replace it with a new one. A Lock is used to
+    # wait until the main thread finishes writing into found_open_ports, if any.
     with found_open_ports_lock:
         to_send = found_open_ports
         found_open_ports = {}
 
-    print(f"[{datetime.now().isoformat()}] Sending open ports...", file=sys.stderr, flush=True)
+    dbgprint("Sending open ports...")
     datapoints = []
     for key, val in to_send.items():
         ip, port = key
-        t1 = val['t1'].toDatetime().isoformat() # ISO format needed for ADiCT (YYYY-MM-DDThh:mm:ss[.fff][Z])
-        t2 = val['t2'].toDatetime().isoformat()
-        conns = val['conns']
+        t1 = (
+            val["t1"].toDatetime().isoformat()
+        )  # ISO format needed for ADiCT (YYYY-MM-DDThh:mm:ss[.fff][Z])
+        t2 = val["t2"].toDatetime().isoformat()
+        conns = val["conns"]
 
         if t2 < t1:  # shouldn't happen, but... just in case
-            print(f"WARNING: time_last < time_first, this shouldn't be possible (unless a flow with wrong "
-                  f"timestamps was received)! The record will be dropped. Details: "
-                  f"ip={ip}, port={port}, time_first={t1}, time_last={t2}", file=sys.stderr, flush=True)
+            dbgprint(
+                f"WARNING: time_last < time_first, this shouldn't be possible "
+                f"(unless a flow with wrong timestamps was received)! "
+                f"The record will be dropped. Details: "
+                f"ip={ip}, port={port}, time_first={t1}, time_last={t2}",
+            )
             continue
 
         datapoint = {
@@ -291,54 +367,78 @@ def send_datapoints(url: str, srctag: str):
     if url:
         post_datapoint_list(url, datapoints)
 
-    print(f"[{datetime.now().isoformat()}] Done.", file=sys.stderr, flush=True)
+    dbgprint("Done.")
 
 
 def sender_thread_func(url: str, srctag: str, interval: int):
-    """Sends out cached data about open ports every 'interval' seconds (to be run as a separate thread)
+    """Sends out cached data about open ports every 'interval' seconds
+    (to be run as a separate thread)
 
     url and src_tag parameters are passed to send_datapoints().
     """
-    #dbgprint(f"(sender) Will send data every {interval} seconds")
     next_send_time = time.time()
     while not stop.is_set():
         # Sleep for the 'interval' seconds from the last interation
         next_send_time += interval
         sleep_time = next_send_time - time.time()
-        # Check for the case sending is so slow or blocked it takes longer than the interval
+        # Check for the case sending is so slow
+        # or blocked it takes longer than the interval
         if sleep_time < 0:
-            print("WARNING: The last attempt to send out data took longer than the send interval!", file=sys.stderr, flush=True)
-            next_send_time += (-sleep_time) // interval # next_send_time is in the past, inrcement it so many times it gets into the future
+            dbgprint(
+                "WARNING: The last attempt to send out data took longer than the send "
+                "interval!",
+            )
+            # next_send_time is in the past,
+            # increment it so many times it gets into the future
+            next_send_time += (-sleep_time) // interval
             sleep_time = 0
-        # Wait for sleep_time seconds, unless the "stop" flag is set, in which case stop this thread.
-        #dbgprint(f"(sender) Next sending at {datetime.fromtimestamp(next_send_time).isoformat()}. Sleeping for {sleep_time} seconds ...")
+        # Wait for sleep_time seconds, unless the "stop" flag is set,
+        # in which case stop this thread.
         if stop.wait(sleep_time) is True:
-            return # Exit this thread. Any pending data will be sent by the main thread.
+            # Exit this thread. Any pending data will be sent by the main thread.
+            return
         send_datapoints(url=url, srctag=srctag)
 
 
-def create_network_filter(networks: Optional[Iterable[str]], networks_file: Optional[_io.TextIOWrapper], verbose: Optional[bool]=False) -> Callable:
+def create_network_filter(
+    networks: Optional[Iterable[str]],
+    networks_file: Optional[_io.TextIOWrapper],
+    verbose: Optional[bool] = False,
+) -> Callable:
     """Load networks passed via arguments or a file, return filtering function"""
     # TODO:
-    #   The first version represents prefixes as Python native IPv4Netwrork/IPv6Network. Incoming IP addresses must
-    #   be converted from unirec format to `ipaddress`.
-    #   The second version represents prefixes as UnirecIPAddrRange, so Unirec format and its comparison methods
-    #   can be used directly.
+    #   The first version represents prefixes as Python native IPv4Netwrork/IPv6Network.
+    #   Incoming IP addresses must be converted from unirec format to `ipaddress`.
+    #   The second version represents prefixes as UnirecIPAddrRange,
+    #   so Unirec format and its comparison methods can be used directly.
     #   TODO: find out what is faster.
-    # def validate_ipv46_network(net_str: str, line_no: int = None) -> Union[ipaddress.IPv4Network, ipaddress.IPv6Network]:
+
+    # def validate_ipv46_network(
+    #         net_str: str, line_no: int = None
+    # ) -> Union[ipaddress.IPv4Network, ipaddress.IPv6Network]:
     #     try:
     #         if ":" in net_str:
     #             return ipaddress.IPv6Network(net_str)
     #         else:
     #             return ipaddress.IPv4Network(net_str)
     #     except ValueError as e:
-    #         raise ValueError(f"Invalid network" + (f" on line {line_no}" if line_no is not None else " passed") + f": {e}")
+    #         raise ValueError(
+    #             f"Invalid network" + (
+    #                 f" on line {line_no}" if line_no is not None else " passed"
+    #             ) + f": {e}"
+    #         )
 
-    def validate_ipv46_network(net_str: str, line_no: int = None) -> pytrap.UnirecIPAddrRange:
+    def validate_ipv46_network(
+        net_str: str, line_no: int = None
+    ) -> pytrap.UnirecIPAddrRange:
         try:
             return pytrap.UnirecIPAddrRange(net_str)
         except ValueError as e:
-            raise ValueError(f"Invalid network" + (f" on line {line_no}" if line_no is not None else " passed") + f": {e}")
+            raise ValueError(
+                "Invalid network"
+                + (f" on line {line_no}" if line_no is not None else " passed")
+                + f": {e}"
+            ) from e
 
     # Load networks (IP prefixes) to watch
     networks_to_watch = set()
@@ -348,19 +448,22 @@ def create_network_filter(networks: Optional[Iterable[str]], networks_file: Opti
 
     if networks_file:
         for i, net_str in enumerate(networks_file, 1):
-            net_str = re.sub(r'(#|//).*', "", net_str).strip()
+            net_str = re.sub(r"(#|//).*", "", net_str).strip()
             if net_str == "":
                 continue
             networks_to_watch.add(validate_ipv46_network(net_str, i))
 
-    # Create net_filter function - return True if given IP belongs to any of the monitored networks
+    # Create net_filter function
+    # - return True if given IP belongs to any of the monitored networks
     if networks_to_watch:
-        net_filter = lambda ip: any(ip in net for net in networks_to_watch)
+        net_filter = partial(net_filter_networks, networks_to_watch=networks_to_watch)
         if verbose:
-            print("Only IPs from these networks will be watched for open ports:", file=sys.stderr)
-            print(",".join(map(str, networks_to_watch)), file=sys.stderr, flush=True)
+            dbgprint(
+                "Only IPs from these networks will be watched for open ports:",
+            )
+            dbgprint(",".join(map(str, networks_to_watch)))
     else:
-        net_filter = lambda ip: True
+        net_filter = net_filter_true
     return net_filter
 
 
@@ -369,7 +472,8 @@ def signal_handler(sig, frame):
     # Signalize to the sender thread and to the main loop to stop
     dbgprint("Signal received, going to exit...")
     stop.set()
-    # Revert signal handlers to defaults, so the next Ctrl-C (or anoher signal) stops the program immediately
+    # Revert signal handlers to defaults, so the next Ctrl-C (or anoher signal) stops
+    # the program immediately
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
     signal.signal(signal.SIGABRT, signal.SIG_DFL)
@@ -377,48 +481,86 @@ def signal_handler(sig, frame):
 
 def main():
     """Main function of the module."""
-    global biflow_support, found_open_ports, net_filter
+    global biflow_support, net_filter
 
     parser = argparse.ArgumentParser(
-        description="Analyze IP flows to get information about open ports on each IP address. This information is periodically sent to ADiCT server.",
+        description="Analyze IP flows to get information about open ports on each IP "
+        "address. This information is periodically sent to ADiCT server.",
     )
     # Standard NEMEA module arguments
-    parser.add_argument("-i", metavar="IFC_SPEC",
-        help='Specification of interface types and their parameters, see "-h trap" (mandatory parameter).')
+    parser.add_argument(
+        "-i",
+        metavar="IFC_SPEC",
+        help="Specification of interface types and their parameters, "
+        'see "-h trap" (mandatory parameter).',
+    )
     parser.add_argument("-v", help="Be verbose.", action="store_true")
     parser.add_argument("-vv", help="Be more verbose.", action="store_true")
     parser.add_argument("-vvv", help="Be even more verbose.", action="store_true")
 
     # Custom arguments
-    parser.add_argument("-u", "--url", metavar="URL",
-        help="Base URL of ADiCT API. If not given, results are just printed to stdout (for testing/debugging)"
+    parser.add_argument(
+        "-u",
+        "--url",
+        metavar="URL",
+        help="Base URL of ADiCT API. If not given, results are just printed to stdout "
+        "(for testing/debugging)",
     )
-    parser.add_argument("-S", "--send-interval", type=int, metavar="SECONDS", default=300,
-        help="Period of sending data to ADiCT server (in seconds, default: 300)"
+    parser.add_argument(
+        "-S",
+        "--send-interval",
+        type=int,
+        metavar="SECONDS",
+        default=300,
+        help="Period of sending data to ADiCT server (in seconds, default: 300)",
     )
-    parser.add_argument("-n", "--networks", nargs="+", metavar="IP_PREFIX", default="",
-        help='IP networks (in CIDR format) to monitor. Only data of IPs from these networks will be included. '
-             'Multiple networks can be specified as "-n 192.168.1.0/24 10.0.0.0/8". Both IPv4 and IPv6 is supported. '
-             'If not set, all IPs are included.',
+    parser.add_argument(
+        "-n",
+        "--networks",
+        nargs="+",
+        metavar="IP_PREFIX",
+        default="",
+        help="IP networks (in CIDR format) to monitor. Only data of IPs from these "
+        "networks will be included. Multiple networks can be specified as "
+        '"-n 192.168.1.0/24 10.0.0.0/8". Both IPv4 and IPv6 is supported. '
+        "If not set, all IPs are included.",
     )
-    parser.add_argument("-N", "--networks-file", metavar="IP_PREFIX_FILE", type=FileType('r'),
-        help="Same as -n, but load list of prefixes from file (one prefix per line, '#' or '//' comments supported).",
+    parser.add_argument(
+        "-N",
+        "--networks-file",
+        metavar="IP_PREFIX_FILE",
+        type=FileType("r"),
+        help="Same as -n, but load list of prefixes from file "
+        "(one prefix per line, '#' or '//' comments supported).",
     )
     # TODO
     # parser.add_argument("-p", "--ports", metavar="PORTS",
     #     help="Only watch for these port numbers (format ex.: '1-1024,8000,8080')",
     # )
-    parser.add_argument("-t", "--srctag", metavar="NAME", default="open_ports",
-        help="Name of this instance (used as 'src' tag in data-points sent to ADiCT). Default: open_ports",
+    parser.add_argument(
+        "-t",
+        "--srctag",
+        metavar="NAME",
+        default="open_ports",
+        help="Name of this instance (used as 'src' tag in data-points sent to ADiCT). "
+        "Default: open_ports",
     )
-    parser.add_argument("-r", "--cache-rotation", type=int, metavar="SECONDS", default=120,
-        help="Period of cache rotation of the internal biflow aggregator. Should be larger than the maximum expected "
-             "delay between receiving flow records of both directions of a connection (in seconds, default: 120)"
+    parser.add_argument(
+        "-r",
+        "--cache-rotation",
+        type=int,
+        metavar="SECONDS",
+        default=120,
+        help="Period of cache rotation of the internal biflow aggregator. Should be "
+        "larger than the maximum expected delay between receiving flow records "
+        "of both directions of a connection (in seconds, default: 120)",
     )
     args = parser.parse_args()
 
     if args.cache_rotation < 1:
-        print("ERROR: Cache rotation interval must be at least 1 second", file=sys.stderr)
+        print(
+            "ERROR: Cache rotation interval must be at least 1 second", file=sys.stderr
+        )
         return 1
     if args.send_interval < 1:
         print("ERROR: Send interval must be at least 1 second", file=sys.stderr)
@@ -426,7 +568,9 @@ def main():
 
     # Parse networks and create a filter function
     try:
-        net_filter = create_network_filter(args.networks, args.networks_file, verbose=True)
+        net_filter = create_network_filter(
+            args.networks, args.networks_file, verbose=True
+        )
     except ValueError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
@@ -434,13 +578,16 @@ def main():
     # TODO parse "ports"
     # regports = load_table_ports(arg.sports)
 
-    #print("TRAP initialization")
     trap = pytrap.TrapCtx()
     trap.init(sys.argv, 1, 0)  # argv, ifcin - 1 input IFC, ifcout - 0 output IFC
-    # Set timeout on the input interface to 500ms (so a signal is correctly handled even if no data are being received)
+    # Set timeout on the input interface to 500ms (so a signal is correctly handled
+    # even if no data are being received)
     trap.ifcctl(ifcidx=0, dir_in=True, request=pytrap.CTL_TIMEOUT, value=500000)
     # Set the list of required fields in received messages.
-    inputspec = "ipaddr DST_IP,ipaddr SRC_IP,time TIME_FIRST,time TIME_LAST,uint32 PACKETS,uint16 DST_PORT,uint16 SRC_PORT,uint8 PROTOCOL,uint8 TCP_FLAGS"
+    inputspec = (
+        "ipaddr DST_IP,ipaddr SRC_IP,time TIME_FIRST,time TIME_LAST,uint32 PACKETS,"
+        "uint16 DST_PORT,uint16 SRC_PORT,uint8 PROTOCOL,uint8 TCP_FLAGS"
+    )
     trap.setRequiredFmt(0, pytrap.FMT_UNIREC, inputspec)
     rec = pytrap.UnirecTemplate(inputspec)
 
@@ -450,14 +597,18 @@ def main():
         # Strip any trailing slash from the URL
         args.url = args.url.rstrip("/")
 
-        # Test connection to the base URL (try the '/' endpoint, it should return 200 OK)
+        # Test connection to the base URL
+        # (try the '/' endpoint, it should return 200 OK)
         try:
             resp = requests.get(args.url + "/")
-        except IOError as e:
+        except OSError as e:
             print(f"Test connection to ADiCT API failed: {e}")
             return 2
         if resp.status_code != 200:
-            print(f"Test connection to ADiCT API failed, unexpected reply ({resp.status_code}): {resp.text[:200]}")
+            print(
+                f"Test connection to ADiCT API failed, "
+                f"unexpected reply ({resp.status_code}): {resp.text[:200]}"
+            )
             return 2
 
     # Register the signal handler for correct program termination
@@ -465,14 +616,20 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGABRT, signal_handler)
 
-    # Start a separate thread for cache rotation in biflow_aggregator
-    # (make it a daemon thread, so it's automatically joined/killed when the main thread exits)
+    # Start a separate thread for cache rotation in biflow_aggregator (make it a
+    # daemon thread, so it's automatically joined/killed when the main thread exits)
     # TODO: make cache rotation interval configurable (now it's 2 minutes)
-    cache_rotation_thread = Thread(target=biflow_aggregator.cache_rotation_thread, args=(args.cache_rotation,), daemon=True)
+    cache_rotation_thread = Thread(
+        target=biflow_aggregator.cache_rotation_thread,
+        args=(args.cache_rotation,),
+        daemon=True,
+    )
     cache_rotation_thread.start()
 
     # Start a separate thread for sending out data about found open ports
-    sender_thread = Thread(target=sender_thread_func, args=(args.url, args.srctag, args.send_interval))
+    sender_thread = Thread(
+        target=sender_thread_func, args=(args.url, args.srctag, args.send_interval)
+    )
     sender_thread.start()
 
     # Main loop to read ip-flows from input interface
@@ -488,7 +645,7 @@ def main():
         except pytrap.TimeoutError:
             continue
         if len(data) <= 1:
-            stop.set() # signalize to the sender thread to stop
+            stop.set()  # signalize to the sender thread to stop
             break
         rec.setData(data)  # set the IP flow to created template
 
@@ -497,33 +654,31 @@ def main():
             try:
                 _ = rec.PACKETS_REV
                 biflow_support = True
-                print("Bi-flow support detected", file=sys.stderr, flush=True)
+                dbgprint("Bi-flow support detected")
             except AttributeError:
                 biflow_support = False
-                print("Bi-flow support not detected", file=sys.stderr, flush=True)
+                dbgprint("Bi-flow support not detected")
 
         # === Process the (bi)flow ===
 
-        #dbgprint(f"Flow: {rec.SRC_IP}:{rec.SRC_PORT} -> {rec.DST_IP}:{rec.DST_PORT}  pkts: {rec.PACKETS}, pkts_rev: {rec.PACKETS_REV if biflow_support else 'N/A'}")
-
         # Input filters
-        if rec.PROTOCOL != 6: # TCP
-            #dbgprint("Not TCP - skipped")
-            continue # TODO: Support detecting "open"/used UDP ports? (Not a problem here, but it must be supported by the target system (ADiCT))
+        if rec.PROTOCOL != 6:  # TCP
+            continue
+            # TODO: Support detecting "open"/used UDP ports? (Not a problem
+            #   here, but it must be supported by the target system (ADiCT))
 
-        if rec.TCP_FLAGS & 0x12 != 0x12: # require SYN & ACK flags
-            # If there is no SYN flag, it's probably a continuation of a longer flow. We can't use this, as in this case
-            # it's not possible to determine which side initiated the connection from the flow timestamps.
-            # We also require ACK flag, as each successfully opened TCP connection requires both SYN and ACK flags in both direstions
-            #dbgprint("SYN+ACK flags not set - skipped")
+        if rec.TCP_FLAGS & 0x12 != 0x12:  # require SYN & ACK flags
+            # If there is no SYN flag, it's probably a continuation of a longer flow.
+            # We can't use this, as in this case it's not possible to determine which
+            # side initiated the connection from the flow timestamps. We also require
+            # ACK flag, as each successfully opened TCP connection requires both SYN
+            # and ACK flags in both direstions dbgprint( "SYN+ACK flags not set -
+            # skipped")
             continue
 
-        if not net_filter(rec.SRC_IP) and \
-           not net_filter(rec.DST_IP):
-            #dbgprint("Doesn't match net filter - skipped")
-            continue # neither SRC_IP nor DST_IP belong to the set of monitored prefixes - skip
-
-        #dbgprint(f"Flow: {rec.SRC_IP}:{rec.SRC_PORT} -> {rec.DST_IP}:{rec.DST_PORT}  pkts: {rec.PACKETS}, pkts_rev: {rec.PACKETS_REV if biflow_support else 'N/A'}")
+        if not net_filter(rec.SRC_IP) and not net_filter(rec.DST_IP):
+            # neither SRC_IP nor DST_IP belong to the set of monitored prefixes - skip
+            continue
 
         # Detect if this flow is proper biflow (with both directions filled)
         if biflow_support and rec.PACKETS > 0 and rec.PACKETS_REV > 0:
@@ -535,7 +690,7 @@ def main():
                 rec.DST_PORT,
                 rec.TIME_FIRST,
                 rec.TIME_LAST,
-                rec.TCP_FLAGS
+                rec.TCP_FLAGS,
             )
             process_biflow(biflow)
         else:
