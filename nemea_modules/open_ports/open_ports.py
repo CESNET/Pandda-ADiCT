@@ -618,7 +618,6 @@ def main():
 
     # Start a separate thread for cache rotation in biflow_aggregator (make it a
     # daemon thread, so it's automatically joined/killed when the main thread exits)
-    # TODO: make cache rotation interval configurable (now it's 2 minutes)
     cache_rotation_thread = Thread(
         target=biflow_aggregator.cache_rotation_thread,
         args=(args.cache_rotation,),
