@@ -141,7 +141,18 @@ watch(dt, async () => {
           </h4>
           <div class="row">
             <div class="col col-md-4">
-              <h6 class="w-700">Open ports</h6>
+              <h6>
+                Open ports
+                <VTooltip class="d-inline-block ms-2">
+                  <i class="fa fa-info text-secondary"></i>
+                  <template #popper>
+                    Open TCP ports, based on observation of sucessfully established connections.
+                    <br />
+                    Note that ports which no one connected to (or scanned) recently are not visible
+                    this way.
+                  </template>
+                </VTooltip>
+              </h6>
               <div v-if="(latestSnapshot?.open_ports || []).length > 0">
                 <div
                   v-for="(port, i) in latestSnapshot?.open_ports.sort((a, b) => a - b)"
@@ -158,7 +169,7 @@ watch(dt, async () => {
             </div>
             <div class="col col-md-4">
               <h6>
-                Recog SSH
+                SSH details
                 <VTooltip class="d-inline-block ms-2">
                   <i class="fa fa-info text-secondary"></i>
                   <template #popper>
@@ -174,7 +185,7 @@ watch(dt, async () => {
             </div>
             <div class="col col-md-4">
               <h6>
-                Recog SMTP
+                SMTP details
                 <VTooltip class="d-inline-block ms-2">
                   <i class="fa fa-info text-secondary"></i>
                   <template #popper>
@@ -211,7 +222,7 @@ watch(dt, async () => {
           </div>
           <div class="mb-3">
             <h6>
-              Recog SSH
+              SSH details
               <VTooltip class="d-inline-block ms-2">
                 <i class="fa fa-info text-secondary"></i>
                 <template #popper>
@@ -231,7 +242,7 @@ watch(dt, async () => {
           </div>
           <div class="mb-3">
             <h6>
-              Recog SMTP
+              SMTP details
               <VTooltip class="d-inline-block ms-2">
                 <i class="fa fa-info text-secondary"></i>
                 <template #popper>
