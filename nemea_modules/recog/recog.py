@@ -224,7 +224,7 @@ def get_data(record: str) -> Optional[dict]:
         if match:
             if verbose:
                 print(f"-> MATCH: {fingerprints[patt.pattern]}")
-            data = fingerprints[patt.pattern]
+            data = fingerprints[patt.pattern].copy()
 
             position = data.pop("position", False)
             if position:
