@@ -196,10 +196,6 @@ class BiflowAggregator:
             # The dst->src flow was already observed, pair them together into
             # a bidirectional flow
             c_time_first, c_time_last, c_tcp_flags = reverse_flow
-            # TODO: Also look for SYN flag - if not present it is likely a continuation,
-            #  so it's not possible to infer the direction from timestamps !!!!!!!!!!!!
-            #  It could be implemented as one of the first filters,
-            #  when a flow is received.
             if time_first < c_time_first:
                 # the current flow was first, its SRC IP initiated the connection,
                 # so it's SRC of bidir flow
@@ -650,8 +646,7 @@ def main():
             # We can't use this, as in this case it's not possible to determine which
             # side initiated the connection from the flow timestamps. We also require
             # ACK flag, as each successfully opened TCP connection requires both SYN
-            # and ACK flags in both direstions dbgprint( "SYN+ACK flags not set -
-            # skipped")
+            # and ACK flags in both directions.
             continue
 
         if not net_filter(rec.SRC_IP) and not net_filter(rec.DST_IP):
