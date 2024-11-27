@@ -16,7 +16,7 @@ const props = defineProps({
 })
 
 const CHART_UNITS = ['pkt', 'flw', 'B']
-const CHART_COLORS = ['#DC3545', '#FFC107', '#0D6EFD']
+const CHART_COLORS = ['#0DCAF0', '#198754', '#FFC107']
 
 const chartOptions = computed(() => {
   let scaleXOptions = {
