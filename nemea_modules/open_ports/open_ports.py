@@ -406,27 +406,6 @@ def create_network_filter(
     verbose: Optional[bool] = False,
 ) -> Callable:
     """Load networks passed via arguments or a file, return filtering function"""
-    # TODO:
-    #   The first version represents prefixes as Python native IPv4Netwrork/IPv6Network.
-    #   Incoming IP addresses must be converted from unirec format to `ipaddress`.
-    #   The second version represents prefixes as UnirecIPAddrRange,
-    #   so Unirec format and its comparison methods can be used directly.
-    #   TODO: find out what is faster.
-
-    # def validate_ipv46_network(
-    #         net_str: str, line_no: int = None
-    # ) -> Union[ipaddress.IPv4Network, ipaddress.IPv6Network]:
-    #     try:
-    #         if ":" in net_str:
-    #             return ipaddress.IPv6Network(net_str)
-    #         else:
-    #             return ipaddress.IPv4Network(net_str)
-    #     except ValueError as e:
-    #         raise ValueError(
-    #             f"Invalid network" + (
-    #                 f" on line {line_no}" if line_no is not None else " passed"
-    #             ) + f": {e}"
-    #         )
 
     def validate_ipv46_network(
         net_str: str, line_no: int = None
