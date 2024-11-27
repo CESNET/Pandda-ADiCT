@@ -86,17 +86,14 @@ for fingerprint in root.iter("fingerprint"):
     # Iterate over each param element
     for param in fingerprint.iter("param"):
         # Extract the name and value attributes
-        pos = param.get("pos")
-        name = param.get("name")
-        value = param.get("value")
+        pos = param.get("pos", "0")
+        name = param.get("name", None)
+        value = param.get("value", None)
 
         pos = int(pos)
-        if name != "cookie":
-            category, item = name.split(".", 1)
-        else:
+        if name == "cookie" or ((value is None) and (pos == 0)) or name is None:
             continue
-        if (value is None) and (pos == 0):
-            continue
+        category, item = name.split(".", 1)
         if category == "os":
             os[item] = value
         elif category == "service":
