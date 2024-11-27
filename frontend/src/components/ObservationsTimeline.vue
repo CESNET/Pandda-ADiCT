@@ -147,6 +147,6 @@ const chartData = computed(() => {
 
 <style lang="css" scoped>
 .chart {
-  height: 10rem;
+  height: 12rem;
 }
 </style>
