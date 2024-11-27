@@ -15,13 +15,10 @@ const props = defineProps({
   },
 })
 
-const chartOptions = computed(() => {
-  const UNITS = {
-    0: 'pkt',
-    1: 'flw',
-    2: 'B',
-  }
+const CHART_UNITS = ['pkt', 'flw', 'B']
+const CHART_COLORS = ['#DC3545', '#FFC107', '#0D6EFD']
 
+const chartOptions = computed(() => {
   let scaleXOptions = {
     type: 'time',
     time: {
@@ -53,20 +50,29 @@ const chartOptions = computed(() => {
       x: scaleXOptions,
       packets: {
         ticks: {
-          callback: (v) => `${v} ${UNITS[0]}`,
+          callback: (v) => `${v} ${CHART_UNITS[0]}`,
+          color: CHART_COLORS[0],
         },
+        grid: { tickColor: CHART_COLORS[0], drawOnChartArea: false },
+        border: { color: CHART_COLORS[0] },
         min: 0,
       },
       flows: {
         ticks: {
-          callback: (v) => `${v} ${UNITS[1]}`,
+          callback: (v) => `${v} ${CHART_UNITS[1]}`,
+          color: CHART_COLORS[1],
         },
+        grid: { tickColor: CHART_COLORS[1], drawOnChartArea: false },
+        border: { color: CHART_COLORS[1] },
         min: 0,
       },
       bytes: {
         ticks: {
-          callback: (v) => `${v} ${UNITS[2]}`,
+          callback: (v) => `${v} ${CHART_UNITS[2]}`,
+          color: CHART_COLORS[2],
         },
+        grid: { tickColor: CHART_COLORS[2] },
+        border: { color: CHART_COLORS[2] },
         min: 0,
       },
     },
@@ -75,7 +81,7 @@ const chartOptions = computed(() => {
       tooltip: {
         callbacks: {
           label: (item) => {
-            let unit = UNITS[item.datasetIndex]
+            let unit = CHART_UNITS[item.datasetIndex]
             return `${item.formattedValue} ${unit}`
           },
         },
@@ -107,7 +113,7 @@ const chartData = computed(() => {
           xAxisKey: 't',
           yAxisKey: 'packets',
         },
-        borderColor: '#DC3545',
+        borderColor: CHART_COLORS[0],
         pointRadius: 4,
         pointHitRadius: 5,
       },
@@ -119,7 +125,7 @@ const chartData = computed(() => {
           xAxisKey: 't',
           yAxisKey: 'flows',
         },
-        borderColor: '#FFC107',
+        borderColor: CHART_COLORS[1],
         pointRadius: 4,
         pointHitRadius: 5,
       },
@@ -131,7 +137,7 @@ const chartData = computed(() => {
           xAxisKey: 't',
           yAxisKey: 'bytes',
         },
-        borderColor: '#0D6EFD',
+        borderColor: CHART_COLORS[2],
         pointRadius: 4,
         pointHitRadius: 5,
       },
