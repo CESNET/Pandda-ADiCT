@@ -6,7 +6,7 @@ import sys
 import xml.etree.ElementTree as ET
 from argparse import ArgumentParser
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Callable, List, Optional, Tuple
 
 import pytrap
 
@@ -152,7 +152,7 @@ def create_datapoint(rec: pytrap.UnirecTemplate, data: dict, mode: str, ip: str)
 
 def ssh_extract_banners(
     rec: pytrap.UnirecTemplate,
-) -> Optional[tuple[list[str], str]]:
+) -> Optional[Tuple[List[str], str]]:
     content = rec.IDP_CONTENT_REV
     try:
         content = content.decode("utf-8").strip()
@@ -174,7 +174,7 @@ def ssh_extract_banners(
 
 def smtp_extract_banners(
     rec: pytrap.UnirecTemplate,
-) -> Optional[tuple[list[str], str]]:
+) -> Optional[Tuple[List[str], str]]:
     content = rec.IDP_CONTENT_REV
     try:
         content = content.decode("utf-8").strip()
@@ -196,7 +196,7 @@ def smtp_extract_banners(
 
 def http_server_extract_banners(
     rec: pytrap.UnirecTemplate,
-) -> Optional[tuple[list[str], str]]:
+) -> Optional[Tuple[List[str], str]]:
     try:
         server = rec.HTTP_RESPONSE_SERVER
     except UnicodeDecodeError:
@@ -206,7 +206,7 @@ def http_server_extract_banners(
 
 def http_setcookie_extract_banners(
     rec: pytrap.UnirecTemplate,
-) -> Optional[tuple[list[str], str]]:
+) -> Optional[Tuple[List[str], str]]:
     cookie_names = rec.HTTP_RESPONSE_SET_COOKIE_NAMES.split(";")
     if cookie_names[0]:
         cookie = [name + "=" for name in cookie_names]
@@ -261,7 +261,7 @@ def get_data(record: str) -> Optional[dict]:
 
 def do_detection(
     rec: pytrap.UnirecTemplate,
-    extract_data: Callable[[pytrap.UnirecTemplate], Optional[tuple[list[str], str]]],
+    extract_data: Callable[[pytrap.UnirecTemplate], Optional[Tuple[List[str], str]]],
     mode: str,
 ) -> None:
     result_or_none = extract_data(rec)
