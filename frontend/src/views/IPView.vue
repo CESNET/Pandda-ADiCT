@@ -210,14 +210,6 @@ watch(dt, async () => {
             <div v-else class="alert alert-info">No snapshots</div>
           </div>
           <div class="mb-3">
-            <h6>Activity</h6>
-            <ActivityTimeline
-              v-if="masterRecord.activity && masterRecord.activity.length > 0"
-              :activity="masterRecord.activity"
-            />
-            <div v-else class="alert alert-info">No data</div>
-          </div>
-          <div class="mb-3">
             <h6>
               Recog SSH
               <VTooltip class="d-inline-block ms-2">
@@ -256,6 +248,14 @@ watch(dt, async () => {
               :valueMapper="stringifyRecogValue"
             />
             <div v-else class="alert alert-info">No snapshots</div>
+          </div>
+          <div class="mb-3">
+            <h6>Activity</h6>
+            <ActivityTimeline
+              v-if="masterRecord.activity && masterRecord.activity.length > 0"
+              :activity="masterRecord.activity"
+            />
+            <div v-else class="alert alert-info">No data</div>
           </div>
         </div>
       </div>
