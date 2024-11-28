@@ -47,22 +47,20 @@ negligence or otherwise) arising in any way out of the use of this software,
 even if advised of the possibility of such damage.
 """
 
-import argparse
-
 # Standard libraries imports
+import argparse
 import re
 import signal
 import sys
 import time
 from argparse import FileType
 from collections import namedtuple
-from collections.abc import Iterable, Iterator
 from datetime import datetime
 from functools import partial
 from io import TextIOWrapper
 from itertools import islice
 from threading import Event, Lock, Thread
-from typing import Callable, Optional
+from typing import Callable, Iterable, Iterator, Optional
 
 # NEMEA system library
 import pytrap
