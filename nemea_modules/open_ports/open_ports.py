@@ -241,8 +241,6 @@ def process_biflow(biflow: Biflow):
     if not net_filter(biflow.dstip):
         return
 
-    # TODO apply port filter
-
     # Port is open and matched both filters - add it to the dict
     # first search if this port already has a record in the dict
     key = (biflow.dstip, biflow.dstport)
@@ -508,10 +506,6 @@ def main():
         help="Same as -n, but load list of prefixes from file "
         "(one prefix per line, '#' or '//' comments supported).",
     )
-    # TODO
-    # parser.add_argument("-p", "--ports", metavar="PORTS",
-    #     help="Only watch for these port numbers (format ex.: '1-1024,8000,8080')",
-    # )
     parser.add_argument(
         "-t",
         "--srctag",
@@ -549,9 +543,6 @@ def main():
     except ValueError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
-
-    # TODO parse "ports"
-    # regports = load_table_ports(arg.sports)
 
     trap = pytrap.TrapCtx()
     trap.init(sys.argv, 1, 0)  # argv, ifcin - 1 input IFC, ifcout - 0 output IFC
