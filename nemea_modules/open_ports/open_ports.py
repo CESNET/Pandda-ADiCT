@@ -47,7 +47,6 @@ negligence or otherwise) arising in any way out of the use of this software,
 even if advised of the possibility of such damage.
 """
 
-import _io
 import argparse
 
 # Standard libraries imports
@@ -60,6 +59,7 @@ from collections import namedtuple
 from collections.abc import Iterable, Iterator
 from datetime import datetime
 from functools import partial
+from io import TextIOWrapper
 from itertools import islice
 from threading import Event, Lock, Thread
 from typing import Callable, Optional
@@ -396,7 +396,7 @@ def sender_thread_func(url: str, srctag: str, interval: int):
 
 def create_network_filter(
     networks: Optional[Iterable[str]],
-    networks_file: Optional[_io.TextIOWrapper],
+    networks_file: Optional[TextIOWrapper],
     verbose: Optional[bool] = False,
 ) -> Callable:
     """Load networks passed via arguments or a file, return filtering function"""
