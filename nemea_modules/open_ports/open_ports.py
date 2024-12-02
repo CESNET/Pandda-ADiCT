@@ -200,29 +200,15 @@ class BiflowAggregator:
             # The dst->src flow was already observed, pair them together into
             # a bidirectional flow
             c_time_first, c_time_last, c_tcp_flags = reverse_flow
-            if time_first < c_time_first:
-                # the current flow was first, its SRC IP initiated the connection,
-                # so it's SRC of bidir flow
-                aggregated_flow = Biflow(
-                    srcip,
-                    srcport,
-                    dstip,
-                    dstport,
-                    min(time_first, c_time_first),
-                    max(time_last, c_time_last),
-                    tcp_flags | c_tcp_flags,
-                )
-            else:
-                # the cached flow was first, reverse the IP addresses
-                aggregated_flow = Biflow(
-                    dstip,
-                    dstport,
-                    srcip,
-                    srcport,
-                    min(time_first, c_time_first),
-                    max(time_last, c_time_last),
-                    tcp_flags | c_tcp_flags,
-                )
+            flow_key = self.order_tcp_flow_key(
+                srcip, srcport, dstip, dstport, time_first, c_time_first
+            )
+            aggregated_flow = Biflow(
+                *flow_key,
+                min(time_first, c_time_first),
+                max(time_last, c_time_last),
+                tcp_flags | c_tcp_flags,
+            )
             return aggregated_flow
         else:
             # Corresponding flow in the other direction wasn't observed, yet - cache
@@ -233,6 +219,23 @@ class BiflowAggregator:
             fwd_key = (srcip, srcport, dstip, dstport)
             self._cache[fwd_key] = (time_first, time_last, tcp_flags)
             return None
+
+    @staticmethod
+    def order_tcp_flow_key(
+        f_srcip, f_srcport, f_dstip, f_dstport, time_first_current, time_first_cached
+    ) -> tuple:
+        """Return the Flow keys in the correct order (client->server)
+
+        When possible, we use the timestamps of the flows to determine the direction.
+        If the timestamps are equal, we use the port numbers.
+        heuristics: the lower port number is usually the server port in TCP
+        """
+        if time_first_current < time_first_cached or (
+            time_first_current == time_first_cached and f_dstport <= f_srcport
+        ):
+            return f_srcip, f_srcport, f_dstip, f_dstport
+        else:
+            return f_dstip, f_dstport, f_srcip, f_srcport
 
 
 class BiflowAggregatorUDP(BiflowAggregator):
