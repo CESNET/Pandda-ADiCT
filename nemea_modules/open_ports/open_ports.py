@@ -291,7 +291,8 @@ class BiflowAggregatorUDP(BiflowAggregator):
 
 
 class FoundPortCache:
-    def __init__(self):
+    def __init__(self, well_known_filter: bool):
+        self._well_known_filter = well_known_filter
         # dict (ip,port)->(time_first,time_last,number_of_connections)
         self._open_ports = {}
         # data sending is done by a separate thread, lock to avoid race conditions
@@ -305,6 +306,10 @@ class FoundPortCache:
         (single-direction flows were filtered out earlier).
         """
         if not net_filter(biflow.dstip):
+            return
+
+        # Drop connections from well-known ports non-well-known ports
+        if self._well_known_filter and biflow.srcport < 1024 and biflow.dstport > 1024:
             return
 
         # Port is open and matched both filters - add it to the dict
@@ -603,6 +608,14 @@ def main():
         default=False,
         help="Also detect open UDP ports (experimental, not fully supported)",
     )
+    parser.add_argument(
+        "--no-port-filter",
+        action="store_true",
+        default=False,
+        help="Do not filter out connections from well-known ports to non-well-known "
+        "ports. This is enabled by default due to inaccuracies in flow "
+        "timestamps, which can lead to reversed flows like this.",
+    )
     args = parser.parse_args()
 
     if args.cache_rotation < 1:
@@ -662,8 +675,8 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGABRT, signal_handler)
 
-    tcp_ports = FoundPortCache()
-    udp_ports = FoundPortCache()
+    tcp_ports = FoundPortCache(well_known_filter=not args.no_port_filter)
+    udp_ports = FoundPortCache(well_known_filter=not args.no_port_filter)
 
     # Start a separate thread for cache rotation in biflow_aggregator (make it a
     # daemon thread, so it's automatically joined/killed when the main thread exits)
