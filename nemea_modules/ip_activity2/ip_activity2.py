@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 
-import ipaddress
 import signal
 import sys
 import threading
 from argparse import ArgumentParser
 from datetime import datetime, timedelta
 from json import dumps
+from pathlib import Path
 from queue import Queue
 from sys import argv, stderr
 
 import pytrap
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "common"))
+from ip_network_filter import IPNetworks
 
 inputspec = "ipaddr SRC_IP,uint64 BYTES,time TIME_FIRST,time TIME_LAST,uint32 PACKETS"
 
@@ -132,19 +135,12 @@ def flow_split(start, end, interval):
     return 1 / count
 
 
-def _ip_filtering(networks, ip):
-    """Check if record for current ip should be stored based on -N argument.
-    If -N is not set, all ip addresses should be stored."""
-
-    if not networks:
-        return True
-    else:
-        ip = int(ipaddress.ip_address(ip))
-        for netw, mask in networks:
-            if (ip & mask) == netw:
-                return True
-
-    return False
+def _ip_filtering(networks: IPNetworks, ip: str):
+    """
+    Check if record for current ip should be stored based on monitored prefixes.
+    If no prefixes are set, all ip addresses should be stored.
+    """
+    return not networks.networks or ip in networks
 
 
 def _insert_data(data_table, slot, ip, rec_bytes, rec_packets, rec_flow):
@@ -162,7 +158,9 @@ def _insert_data(data_table, slot, ip, rec_bytes, rec_packets, rec_flow):
         }
 
 
-def data_aggregation(data_table: dict, interval: int, trap, networks, biflow):
+def data_aggregation(
+    data_table: dict, interval: int, trap, networks: IPNetworks, biflow
+):
     """Aggregate incoming flow records into an appropriate time period in timeline.
     If record lasted throughout multiple time periods, it is divided and values are
     interpolated into multiple smaller records, which are then counted to corresponding
@@ -303,7 +301,7 @@ def stop_program(signum, frame):
         )
 
 
-def input_processing(trap: TrapIfc, interval, src_tag, maxage, networks):
+def input_processing(trap: TrapIfc, interval, src_tag, maxage, networks: IPNetworks):
     """Main loop for receiving and processing data.
     Dictionary data_table is main data structure for storing records.
     Format of data table is: {time -> {src_ip -> {number_of_flows/packets/bytes}}}
@@ -428,16 +426,24 @@ def parse_arguments():
     )
 
     parser.add_argument(
-        "-N",
+        "-n",
         "--networks",
-        help=(
-            "IP networks (in CIDR format) to monitor. Only data of IPs from these "
-            "networks will be included. Multiple networks can be separated by commas "
-            "or spaces (quote the whole list in that case). "
-            "If not set, all IPs are included."
-        ),
+        help="IP networks (in CIDR format) to monitor. Only data of IPs from these "
+        "networks will be included. Multiple networks can be separated by commas "
+        "or spaces (quote the whole list in that case). "
+        "If not set, all IPs are included.",
         type=str,
         metavar="IPs",
+        default="",
+    )
+
+    parser.add_argument(
+        "-N",
+        "--networks-file",
+        help="Same as -n, but load list of prefixes from file "
+        "(one prefix per line, '#' or '//' comments supported).",
+        type=str,
+        metavar="FILE",
         default="",
     )
 
@@ -448,15 +454,6 @@ def parse_arguments():
     if arg.maxage < arg.interval:
         print("Max data age can't be less than interval length.")
         sys.exit(1)
-
-    if arg.networks:
-        arg.networks = arg.networks.replace(",", " ").split()
-        for net in arg.networks:
-            try:
-                ipaddress.ip_network(net)
-            except ValueError:
-                print("Badly inserted ip address of network ", net)
-                sys.exit(1)
 
     return arg
 
@@ -469,20 +466,14 @@ def main(inputspec):
 
     verbose = args.verbose  # set global verbose flag
 
+    networks = IPNetworks()
+    if args.networks:
+        networks = IPNetworks.from_list(args.networks.replace(",", " ").split())
+    elif args.networks_file:
+        networks = IPNetworks.from_file(args.networks_file)
+
     if verbose:
-        print(
-            "Watching IPs from networks:",
-            ", ".join(str(ipaddress.ip_network(n) for n in args.networks)),
-        )
-
-    # precalculating networks and masks for faster ip filtering
-    networks = []
-    for net in args.networks:
-        n = ipaddress.ip_network(net)
-        network = int(n.network_address)
-        mask = int(n.netmask)
-
-        networks.append([network, mask])
+        print("Watching IPs from networks:", ", ".join(map(str, networks.networks)))
 
     input_processing(trap, args.interval, args.s, args.maxage, networks)
 
