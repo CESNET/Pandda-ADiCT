@@ -49,16 +49,14 @@ even if advised of the possibility of such damage.
 
 # Standard libraries imports
 import argparse
-import re
 import signal
 import sys
 import time
-from argparse import FileType
 from collections import namedtuple
 from datetime import datetime
 from functools import partial
-from io import TextIOWrapper
 from itertools import islice
+from pathlib import Path
 from threading import Event, Lock, Thread
 from typing import Callable, Iterable, Iterator, Optional
 
@@ -67,6 +65,9 @@ import pytrap
 
 # Third party imports
 import requests
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "common"))
+from ip_network_filter import IPNetworks
 
 # Ignore global variable usage
 # ruff: noqa: PLW0603
@@ -99,9 +100,9 @@ def net_filter_true(ip):
     return True
 
 
-def net_filter_networks(ip, networks_to_watch):
+def net_filter_networks(ip, networks_to_watch: IPNetworks):
     """Return True if the given IP belongs to any of the monitored networks."""
-    return any(ip in net for net in networks_to_watch)
+    return ip in networks_to_watch
 
 
 net_filter = net_filter_true  # default filter function
@@ -473,49 +474,24 @@ def sender_thread_func(
 
 
 def create_network_filter(
-    networks: Optional[Iterable[str]],
-    networks_file: Optional[TextIOWrapper],
+    networks: Optional[str],
+    networks_file: Optional[str],
     verbose: Optional[bool] = False,
 ) -> Callable:
     """Load networks passed via arguments or a file, return filtering function"""
-
-    def validate_ipv46_network(
-        net_str: str, line_no: int = None
-    ) -> pytrap.UnirecIPAddrRange:
-        try:
-            return pytrap.UnirecIPAddrRange(net_str)
-        except ValueError as e:
-            raise ValueError(
-                "Invalid network"
-                + (f" on line {line_no}" if line_no is not None else " passed")
-                + f": {e}"
-            ) from e
-
-    # Load networks (IP prefixes) to watch
-    networks_to_watch = set()
     if networks:
-        for net_str in networks:
-            networks_to_watch.add(validate_ipv46_network(net_str))
-
-    if networks_file:
-        for i, net_str in enumerate(networks_file, 1):
-            net_str = re.sub(r"(#|//).*", "", net_str).strip()
-            if net_str == "":
-                continue
-            networks_to_watch.add(validate_ipv46_network(net_str, i))
-
-    # Create net_filter function
-    # - return True if given IP belongs to any of the monitored networks
-    if networks_to_watch:
-        net_filter = partial(net_filter_networks, networks_to_watch=networks_to_watch)
-        if verbose:
-            dbgprint(
-                "Only IPs from these networks will be watched for open ports:",
-            )
-            dbgprint(",".join(map(str, networks_to_watch)))
+        networks_to_watch = IPNetworks.from_list(networks.replace(",", " ").split())
+    elif networks_file:
+        networks_to_watch = IPNetworks.from_file(networks_file)
     else:
-        net_filter = net_filter_true
-    return net_filter
+        return net_filter_true
+
+    if verbose:
+        dbgprint(
+            "Only IPs from these networks will be watched for open ports:",
+        )
+        dbgprint(",".join(map(str, networks_to_watch.networks)))
+    return partial(net_filter_networks, networks_to_watch=networks_to_watch)
 
 
 def signal_handler(sig, frame):
@@ -568,19 +544,18 @@ def main():
     parser.add_argument(
         "-n",
         "--networks",
-        nargs="+",
-        metavar="IP_PREFIX",
-        default="",
+        type=str,
+        metavar="IP_PREFIXES",
         help="IP networks (in CIDR format) to monitor. Only data of IPs from these "
-        "networks will be included. Multiple networks can be specified as "
-        '"-n 192.168.1.0/24 10.0.0.0/8". Both IPv4 and IPv6 is supported. '
+        "networks will be included. Multiple networks can be separated by commas "
+        "or spaces (quote the whole list in that case). "
         "If not set, all IPs are included.",
     )
     parser.add_argument(
         "-N",
         "--networks-file",
         metavar="IP_PREFIX_FILE",
-        type=FileType("r"),
+        type=str,
         help="Same as -n, but load list of prefixes from file "
         "(one prefix per line, '#' or '//' comments supported).",
     )
@@ -789,4 +764,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
