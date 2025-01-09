@@ -74,16 +74,13 @@ import requests
 # output datapoint fields
 TYPE = "ip"
 ATTR = "open_ports"
+ATTR_UDP = "open_ports_udp"
 HTTP_REQUEST_TIMEOUT = 10  # seconds
 DATAPOINTS_PER_REQUEST = 500
 
 # Global variables
 # are bidirectional flows supported according to input unirec template?
 biflow_support = None
-
-found_open_ports = {}  # dict (ip,port)->(time_first,time_last,number_of_connections)
-# data sending is done by a separate thread, lock is needed to avoid race conditions
-found_open_ports_lock = Lock()
 
 stop = Event()  # a flag to signalize the program should stop (stops the sending thread)
 
@@ -145,6 +142,7 @@ class BiflowAggregator:
         # cache from previous time window
         # (used only to look up flows, new ones are written to _cache)
         self._prev_cache = {}
+        self._cache_rotation_thread = None
 
     def rotate_cache(self):
         """Clear the current cache (should be called every few minutes)"""
@@ -166,6 +164,14 @@ class BiflowAggregator:
             time.sleep(next_rotation_time - time.time())
             self.rotate_cache()
             next_rotation_time += interval
+
+    def start_cache_rotation_thread(self, interval: int):
+        self._cache_rotation_thread = Thread(
+            target=self.cache_rotation_thread,
+            args=(interval,),
+            daemon=True,
+        )
+        self._cache_rotation_thread.start()
 
     def process_flow(self, rec: pytrap.UnirecTemplate) -> Optional[Biflow]:
         """Try to aggregate a flow with the corresponding cached one in the other
@@ -194,29 +200,15 @@ class BiflowAggregator:
             # The dst->src flow was already observed, pair them together into
             # a bidirectional flow
             c_time_first, c_time_last, c_tcp_flags = reverse_flow
-            if time_first < c_time_first:
-                # the current flow was first, its SRC IP initiated the connection,
-                # so it's SRC of bidir flow
-                aggregated_flow = Biflow(
-                    srcip,
-                    srcport,
-                    dstip,
-                    dstport,
-                    min(time_first, c_time_first),
-                    max(time_last, c_time_last),
-                    tcp_flags | c_tcp_flags,
-                )
-            else:
-                # the cached flow was first, reverse the IP addresses
-                aggregated_flow = Biflow(
-                    dstip,
-                    dstport,
-                    srcip,
-                    srcport,
-                    min(time_first, c_time_first),
-                    max(time_last, c_time_last),
-                    tcp_flags | c_tcp_flags,
-                )
+            flow_key = self.order_tcp_flow_key(
+                srcip, srcport, dstip, dstport, time_first, c_time_first
+            )
+            aggregated_flow = Biflow(
+                *flow_key,
+                min(time_first, c_time_first),
+                max(time_last, c_time_last),
+                tcp_flags | c_tcp_flags,
+            )
             return aggregated_flow
         else:
             # Corresponding flow in the other direction wasn't observed, yet - cache
@@ -228,34 +220,122 @@ class BiflowAggregator:
             self._cache[fwd_key] = (time_first, time_last, tcp_flags)
             return None
 
+    @staticmethod
+    def order_tcp_flow_key(
+        f_srcip, f_srcport, f_dstip, f_dstport, time_first_current, time_first_cached
+    ) -> tuple:
+        """Return the Flow keys in the correct order (client->server)
 
-def process_biflow(biflow: Biflow):
-    """If biflow corresponds to a successful connection to the DST_IP/DST_PORT,
-     mark it as open in 'found_open_ports' dictionary.
-
-    It assumes there was at least one open packet observed in eac direction
-    (single-direction flows were filtered out earlier).
-    """
-    if not net_filter(biflow.dstip):
-        return
-
-    # Port is open and matched both filters - add it to the dict
-    # first search if this port already has a record in the dict
-    key = (biflow.dstip, biflow.dstport)
-    with found_open_ports_lock:
-        rec = found_open_ports.get(key)
-        if rec is None:
-            # not there yet, add new record
-            found_open_ports[key] = {
-                "t1": biflow.time_first,
-                "t2": biflow.time_last,
-                "conns": 1,
-            }
+        When possible, we use the timestamps of the flows to determine the direction.
+        If the timestamps are equal, we use the port numbers.
+        heuristics: the lower port number is usually the server port in TCP
+        """
+        if time_first_current < time_first_cached or (
+            time_first_current == time_first_cached and f_dstport <= f_srcport
+        ):
+            return f_srcip, f_srcport, f_dstip, f_dstport
         else:
-            # there already is a record with the same IP:port, update it
-            rec["t1"] = min(rec["t1"], biflow.time_first)
-            rec["t2"] = max(rec["t2"], biflow.time_last)
-            rec["conns"] += 1
+            return f_dstip, f_dstport, f_srcip, f_srcport
+
+
+class BiflowAggregatorUDP(BiflowAggregator):
+    """Aggregator for UDP flows."""
+
+    def process_flow(self, rec: pytrap.UnirecTemplate) -> Optional[Biflow]:
+        """Try to aggregate a flow with the corresponding cached one in the other
+        direction, if any.
+
+        Return the aggregated bi-flow or None.
+
+        Returned bi-flow is a tuple: (
+            srcip, srcport, dstip, dstport, time_first, time_last, tcp_flags
+        )
+        """
+        srcip = rec.SRC_IP
+        srcport = rec.SRC_PORT
+        dstip = rec.DST_IP
+        dstport = rec.DST_PORT
+        time_first = rec.TIME_FIRST
+        time_last = rec.TIME_LAST
+        # Look if the dst->src flow was already observed
+        # (if it is there, we'll process it and won't need anymore - use pop())
+        rev_key = (dstip, dstport, srcip, srcport)
+        reverse_flow = self._cache.pop(rev_key, None)
+        reverse_flow = reverse_flow or self._prev_cache.pop(rev_key, None)
+        if reverse_flow is not None:
+            # The dst->src flow was already observed, pair them together into
+            # a bidirectional flow
+            c_time_first, c_time_last = reverse_flow
+            flow_key = self.order_udp_flow_key(srcip, srcport, dstip, dstport)
+            return Biflow(
+                *flow_key,
+                min(time_first, c_time_first),
+                max(time_last, c_time_last),
+                0,
+            )
+        else:
+            fwd_key = (srcip, srcport, dstip, dstport)
+            self._cache[fwd_key] = (time_first, time_last)
+            return None
+
+    @staticmethod
+    def order_udp_flow_key(f_srcip, f_srcport, f_dstip, f_dstport) -> tuple:
+        """Return the Flow keys in the correct order (client->server)
+
+        heuristics: the lower port number is usually the server port in UDP
+        """
+        if f_dstport < f_srcport:
+            return f_srcip, f_srcport, f_dstip, f_dstport
+        else:
+            return f_dstip, f_dstport, f_srcip, f_srcport
+
+
+class FoundPortCache:
+    def __init__(self, well_known_filter: bool):
+        self._well_known_filter = well_known_filter
+        # dict (ip,port)->(time_first,time_last,number_of_connections)
+        self._open_ports = {}
+        # data sending is done by a separate thread, lock to avoid race conditions
+        self._lock = Lock()
+
+    def process_biflow(self, biflow: Biflow):
+        """If biflow corresponds to a successful connection to the DST_IP/DST_PORT,
+         mark it as open in 'found_open_ports' dictionary.
+
+        It assumes there was at least one open packet observed in eac direction
+        (single-direction flows were filtered out earlier).
+        """
+        if not net_filter(biflow.dstip):
+            return
+
+        # Drop connections from well-known ports non-well-known ports
+        if self._well_known_filter and biflow.srcport < 1024 and biflow.dstport > 1024:
+            return
+
+        # Port is open and matched both filters - add it to the dict
+        # first search if this port already has a record in the dict
+        key = (biflow.dstip, biflow.dstport)
+        with self._lock:
+            rec = self._open_ports.get(key)
+            if rec is None:
+                # not there yet, add new record
+                self._open_ports[key] = {
+                    "t1": biflow.time_first,
+                    "t2": biflow.time_last,
+                    "conns": 1,
+                }
+            else:
+                # there already is a record with the same IP:port, update it
+                rec["t1"] = min(rec["t1"], biflow.time_first)
+                rec["t2"] = max(rec["t2"], biflow.time_last)
+                rec["conns"] += 1
+
+    def get_to_send_and_clear(self):
+        """Return the content of the cache and clear it."""
+        with self._lock:
+            to_send = self._open_ports
+            self._open_ports = {}
+        return to_send
 
 
 def batched(iterable: Iterable, n: int) -> Iterator[list]:
@@ -301,7 +381,7 @@ def post_datapoint_list(url: str, datapoints: list):
             )
 
 
-def send_datapoints(url: str, srctag: str):
+def send_datapoints(ports: FoundPortCache, url: str, srctag: str, attr: str):
     """Send data about open ports (in found_open_ports dict) as data-points.
 
     The found_open_ports dict is cleared after the data are send.
@@ -310,25 +390,23 @@ def send_datapoints(url: str, srctag: str):
 
     Parameters
     -----------
+    ports : FoundPortCache
+        Cache of found open ports
     srctag : str
         Module name to fill as "src" key
     url : str
         The URL to ADiCT server.
+    attr : str
+        The attribute name to fill as "attr" key
     """
-    global found_open_ports
-    # Copy reference to the dict and replace it with a new one. A Lock is used to
-    # wait until the main thread finishes writing into found_open_ports, if any.
-    with found_open_ports_lock:
-        to_send = found_open_ports
-        found_open_ports = {}
+    to_send = ports.get_to_send_and_clear()
 
     dbgprint("Sending open ports...")
     datapoints = []
     for key, val in to_send.items():
         ip, port = key
-        t1 = (
-            val["t1"].toDatetime().isoformat()
-        )  # ISO format needed for ADiCT (YYYY-MM-DDThh:mm:ss[.fff][Z])
+        # ISO format needed for ADiCT (YYYY-MM-DDThh:mm:ss[.fff][Z])
+        t1 = val["t1"].toDatetime().isoformat()
         t2 = val["t2"].toDatetime().isoformat()
         conns = val["conns"]
 
@@ -344,7 +422,7 @@ def send_datapoints(url: str, srctag: str):
         datapoint = {
             "type": TYPE,
             "id": str(ip),
-            "attr": ATTR,
+            "attr": attr,
             "v": port,
             "t1": t1,
             "t2": t2,
@@ -362,7 +440,9 @@ def send_datapoints(url: str, srctag: str):
     dbgprint("Done.")
 
 
-def sender_thread_func(url: str, srctag: str, interval: int):
+def sender_thread_func(
+    ports: FoundPortCache, url: str, srctag: str, attr: str, interval: int
+):
     """Sends out cached data about open ports every 'interval' seconds
     (to be run as a separate thread)
 
@@ -389,7 +469,7 @@ def sender_thread_func(url: str, srctag: str, interval: int):
         if stop.wait(sleep_time) is True:
             # Exit this thread. Any pending data will be sent by the main thread.
             return
-        send_datapoints(url=url, srctag=srctag)
+        send_datapoints(ports=ports, url=url, srctag=srctag, attr=attr)
 
 
 def create_network_filter(
@@ -522,6 +602,20 @@ def main():
         "larger than the maximum expected delay between receiving flow records "
         "of both directions of a connection (in seconds, default: 120)",
     )
+    parser.add_argument(
+        "--udp-too",
+        action="store_true",
+        default=False,
+        help="Also detect open UDP ports (experimental, not fully supported)",
+    )
+    parser.add_argument(
+        "--no-port-filter",
+        action="store_true",
+        default=False,
+        help="Do not filter out connections from well-known ports to non-well-known "
+        "ports. This is enabled by default due to inaccuracies in flow "
+        "timestamps, which can lead to reversed flows like this.",
+    )
     args = parser.parse_args()
 
     if args.cache_rotation < 1:
@@ -556,6 +650,7 @@ def main():
     rec = pytrap.UnirecTemplate(inputspec)
 
     biflow_aggregator = BiflowAggregator()
+    biflow_aggregator_udp = BiflowAggregatorUDP()
 
     if args.url:
         # Strip any trailing slash from the URL
@@ -580,20 +675,27 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGABRT, signal_handler)
 
+    tcp_ports = FoundPortCache(well_known_filter=not args.no_port_filter)
+    udp_ports = FoundPortCache(well_known_filter=not args.no_port_filter)
+
     # Start a separate thread for cache rotation in biflow_aggregator (make it a
     # daemon thread, so it's automatically joined/killed when the main thread exits)
-    cache_rotation_thread = Thread(
-        target=biflow_aggregator.cache_rotation_thread,
-        args=(args.cache_rotation,),
-        daemon=True,
-    )
-    cache_rotation_thread.start()
+    biflow_aggregator.start_cache_rotation_thread(args.cache_rotation)
+    if args.udp_too:
+        biflow_aggregator_udp.start_cache_rotation_thread(args.cache_rotation)
 
     # Start a separate thread for sending out data about found open ports
     sender_thread = Thread(
-        target=sender_thread_func, args=(args.url, args.srctag, args.send_interval)
+        target=sender_thread_func,
+        args=(tcp_ports, args.url, args.srctag, ATTR, args.send_interval),
     )
     sender_thread.start()
+    if args.udp_too:
+        sender_thread_udp = Thread(
+            target=sender_thread_func,
+            args=(udp_ports, args.url, args.srctag, ATTR_UDP, args.send_interval),
+        )
+        sender_thread_udp.start()
 
     # Main loop to read ip-flows from input interface
     while not stop.is_set():
@@ -623,43 +725,54 @@ def main():
                 dbgprint("Bi-flow support not detected")
 
         # === Process the (bi)flow ===
-
-        # Input filters
-        if rec.PROTOCOL != 6:  # TCP
+        if not net_filter(rec.SRC_IP) and not net_filter(rec.DST_IP):
+            # neither SRC_IP nor DST_IP belong to the set of monitored prefixes - skip
             continue
-            # TODO: Support detecting "open"/used UDP ports? (Not a problem
-            #   here, but it must be supported by the target system (ADiCT))
 
-        if rec.TCP_FLAGS & 0x12 != 0x12:  # require SYN & ACK flags
+        if rec.PROTOCOL == 6 and rec.TCP_FLAGS & 0x12 == 0x12:
+            # TCP, SYN and ACK flags set
             # If there is no SYN flag, it's probably a continuation of a longer flow.
             # We can't use this, as in this case it's not possible to determine which
             # side initiated the connection from the flow timestamps. We also require
             # ACK flag, as each successfully opened TCP connection requires both SYN
             # and ACK flags in both directions.
-            continue
 
-        if not net_filter(rec.SRC_IP) and not net_filter(rec.DST_IP):
-            # neither SRC_IP nor DST_IP belong to the set of monitored prefixes - skip
-            continue
-
-        # Detect if this flow is proper biflow (with both directions filled)
-        if biflow_support and rec.PACKETS > 0 and rec.PACKETS_REV > 0:
-            # it's biflow - parse needed information and detect open port
-            biflow = Biflow(
-                rec.SRC_IP,
-                rec.SRC_PORT,
-                rec.DST_IP,
-                rec.DST_PORT,
-                rec.TIME_FIRST,
-                rec.TIME_LAST,
-                rec.TCP_FLAGS,
-            )
-            process_biflow(biflow)
-        else:
-            # It's uniflow - try to aggregate it, if successful, detect open port
-            biflow = biflow_aggregator.process_flow(rec)
-            if biflow:
-                process_biflow(biflow)
+            # Detect if this flow is proper biflow (with both directions filled)
+            if biflow_support and rec.PACKETS > 0 and rec.PACKETS_REV > 0:
+                # it's biflow - parse needed information and detect open port
+                biflow = Biflow(
+                    rec.SRC_IP,
+                    rec.SRC_PORT,
+                    rec.DST_IP,
+                    rec.DST_PORT,
+                    rec.TIME_FIRST,
+                    rec.TIME_LAST,
+                    rec.TCP_FLAGS,
+                )
+                tcp_ports.process_biflow(biflow)
+            else:
+                # It's uniflow - try to aggregate it, if successful, detect open port
+                biflow = biflow_aggregator.process_flow(rec)
+                if biflow:
+                    tcp_ports.process_biflow(biflow)
+        elif args.udp_too and rec.PROTOCOL == 17:
+            # UDP
+            if biflow_support and rec.PACKETS > 0 and rec.PACKETS_REV > 0:
+                # it's biflow - parse needed information and detect open port
+                biflow = Biflow(
+                    *biflow_aggregator_udp.order_udp_flow_key(
+                        rec.SRC_IP, rec.SRC_PORT, rec.DST_IP, rec.DST_PORT
+                    ),
+                    rec.TIME_FIRST,
+                    rec.TIME_LAST,
+                    0,
+                )
+                udp_ports.process_biflow(biflow)
+            else:
+                # It's uniflow - try to aggregate it, if successful, detect open port
+                biflow = biflow_aggregator_udp.process_flow(rec)
+                if biflow:
+                    udp_ports.process_biflow(biflow)
 
         # =========
 
@@ -667,8 +780,10 @@ def main():
     sender_thread.join()
 
     # Send any cached data before program exit
-    if found_open_ports:
-        send_datapoints(args.url, args.srctag)
+    send_datapoints(tcp_ports, args.url, args.srctag, ATTR)
+    if args.udp_too:
+        send_datapoints(udp_ports, args.url, args.srctag, ATTR_UDP)
+
     # Free allocated TRAP IFCs
     trap.finalize()
 
