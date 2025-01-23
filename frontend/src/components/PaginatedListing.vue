@@ -148,6 +148,7 @@ watch(
 
     <Paginate
       :page-count="pageCount"
+      :initial-page="page"
       :force-page="page"
       :click-handler="changePage"
       prev-text="Prev"
