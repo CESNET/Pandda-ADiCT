@@ -49,7 +49,7 @@ class IPNetworks:
             instance.networks.add(instance.validate_ipv46_network(net_str))
         return instance
 
-    def __contains__(self, ip: str) -> bool:
+    def __contains__(self, ip: pytrap.UnirecIPAddr) -> bool:
         """Check if IP address belongs to any of the networks."""
         return any(ip in net for net in self.networks)
 

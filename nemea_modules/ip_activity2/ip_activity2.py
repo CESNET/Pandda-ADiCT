@@ -77,10 +77,10 @@ class TrapIfc:
             return self.rec.TIME_LAST.toDatetime()
 
     def return_src_ip(self):
-        return str(self.rec.SRC_IP)
+        return self.rec.SRC_IP
 
     def return_dst_ip(self):
-        return str(self.rec.DST_IP)
+        return self.rec.DST_IP
 
     def return_bytes(self):
         return self.rec.BYTES
@@ -135,7 +135,7 @@ def flow_split(start, end, interval):
     return 1 / count
 
 
-def _ip_filtering(networks: IPNetworks, ip: str):
+def _ip_filtering(networks: IPNetworks, ip: pytrap.UnirecIPAddr):
     """
     Check if record for current ip should be stored based on monitored prefixes.
     If no prefixes are set, all ip addresses should be stored.
@@ -267,7 +267,7 @@ def _post_data(trap, interval, queue, src_tag):
                 {
                     "type": "ip",
                     "attr": "activity",
-                    "id": ip,
+                    "id": str(ip),
                     "t1": t_start,
                     "t2": t_end,
                     "v": {
