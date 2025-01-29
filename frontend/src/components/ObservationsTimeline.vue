@@ -140,9 +140,10 @@ const chartData = computed(() => {
 </script>
 
 <template>
-  <div v-if="snapshots.length > 0" class="chart">
+  <div v-if="snapshots.length > 0 && snapshots.some(s => s.id)" class="chart">
     <Line :data="chartData" :options="chartOptions" />
   </div>
+  <div v-else class="alert alert-info">No data</div>
 </template>
 
 <style lang="css" scoped>

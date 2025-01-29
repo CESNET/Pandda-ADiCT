@@ -201,6 +201,8 @@ watch(dt, async () => {
             </div>
           </div>
         </div>
+        <div v-else class="alert alert-info">No data in latest snapshot</div>
+
         <div>
           <h4>
             History
@@ -209,65 +211,62 @@ watch(dt, async () => {
               <template #popper> 24-hour window until selected timestamp. </template>
             </VTooltip>
           </h4>
-          <div class="mb-3">
-            <h6>Open ports</h6>
-            <ObservationsTimeline
-              v-if="snapshots.length > 0"
-              id="open_ports"
-              :snapshots="snapshots"
-              :latestSnapshot="latestSnapshot"
-              :isArrayType="true"
-            />
-            <div v-else class="alert alert-info">No snapshots</div>
+          <div v-if="snapshots.length > 0">
+            <div class="mb-3">
+              <h6>Open ports</h6>
+              <ObservationsTimeline
+                id="open_ports"
+                :snapshots="snapshots"
+                :latestSnapshot="latestSnapshot"
+                :isArrayType="true"
+              />
+            </div>
+            <div class="mb-3">
+              <h6>
+                SSH details
+                <VTooltip class="d-inline-block ms-2">
+                  <i class="fa fa-info text-secondary"></i>
+                  <template #popper>
+                    Service and operating system identifiers parsed from recog SSH attribute values.
+                  </template>
+                </VTooltip>
+              </h6>
+              <ObservationsTimeline
+                id="recog_ssh"
+                :snapshots="snapshots"
+                :latestSnapshot="latestSnapshot"
+                :isArrayType="true"
+                :valueMapper="stringifyRecogValue"
+              />
+            </div>
+            <div class="mb-3">
+              <h6>
+                SMTP details
+                <VTooltip class="d-inline-block ms-2">
+                  <i class="fa fa-info text-secondary"></i>
+                  <template #popper>
+                    Service and operating system identifiers parsed from recog SMTP attribute values.
+                  </template>
+                </VTooltip>
+              </h6>
+              <ObservationsTimeline
+                id="recog_smtp"
+                :snapshots="snapshots"
+                :latestSnapshot="latestSnapshot"
+                :isArrayType="true"
+                :valueMapper="stringifyRecogValue"
+              />
+            </div>
+            <div class="mb-3">
+              <h6>Activity</h6>
+              <ActivityTimeline
+                v-if="masterRecord.activity && masterRecord.activity.length > 0"
+                :activity="masterRecord.activity"
+              />
+              <div v-else class="alert alert-info">No data</div>
+            </div>
           </div>
-          <div class="mb-3">
-            <h6>
-              SSH details
-              <VTooltip class="d-inline-block ms-2">
-                <i class="fa fa-info text-secondary"></i>
-                <template #popper>
-                  Service and operating system identifiers parsed from recog SSH attribute values.
-                </template>
-              </VTooltip>
-            </h6>
-            <ObservationsTimeline
-              v-if="snapshots.length > 0"
-              id="recog_ssh"
-              :snapshots="snapshots"
-              :latestSnapshot="latestSnapshot"
-              :isArrayType="true"
-              :valueMapper="stringifyRecogValue"
-            />
-            <div v-else class="alert alert-info">No snapshots</div>
-          </div>
-          <div class="mb-3">
-            <h6>
-              SMTP details
-              <VTooltip class="d-inline-block ms-2">
-                <i class="fa fa-info text-secondary"></i>
-                <template #popper>
-                  Service and operating system identifiers parsed from recog SMTP attribute values.
-                </template>
-              </VTooltip>
-            </h6>
-            <ObservationsTimeline
-              v-if="snapshots.length > 0"
-              id="recog_smtp"
-              :snapshots="snapshots"
-              :latestSnapshot="latestSnapshot"
-              :isArrayType="true"
-              :valueMapper="stringifyRecogValue"
-            />
-            <div v-else class="alert alert-info">No snapshots</div>
-          </div>
-          <div class="mb-3">
-            <h6>Activity</h6>
-            <ActivityTimeline
-              v-if="masterRecord.activity && masterRecord.activity.length > 0"
-              :activity="masterRecord.activity"
-            />
-            <div v-else class="alert alert-info">No data</div>
-          </div>
+          <div v-else class="alert alert-info">No snapshots</div>
         </div>
       </div>
       <div v-else class="spinner-border"></div>
