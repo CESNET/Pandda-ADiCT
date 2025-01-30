@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(pandda_frontend DESCRIPTION "User interface for PANDDA project")
+project(pandda_gui DESCRIPTION "User interface for PANDDA project")
 
-add_custom_target(frontend ALL COMMAND npm install && npm run build)
+add_custom_target(gui ALL COMMAND npm install && npm run build)
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/dist/" DESTINATION ".")
 
 # Parse version from package.json
@@ -16,7 +16,7 @@ endif(NOT package_json_version)
 # CPack configuration for RPM packaging
 set(CPACK_GENERATOR "RPM")
 set(CPACK_PACKAGE_CONTACT "Dávid Benko <benko@cesnet.cz>")
-set(CPACK_PACKAGE_NAME pandda_frontend)
+set(CPACK_PACKAGE_NAME pandda_gui)
 set(CPACK_PACKAGE_RELEASE 1)
 set(CPACK_PACKAGE_VENDOR "CESNET z.s.p.o.")
 set(CPACK_PACKAGE_VERSION "${package_json_version}")
