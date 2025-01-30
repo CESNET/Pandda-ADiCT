@@ -5,6 +5,11 @@ project(adict_nemea_packages VERSION 1.0.0 DESCRIPTION "NEMEA Packages for ADiCT
 include(../cmake/build_type.cmake)
 include(../cmake/installation.cmake)
 
+# Ensure presence of version specifier
+if(NOT DEFINED package_version)
+    message(FATAL_ERROR "Variable `package_version` is not set!")
+endif()
+
 add_subdirectory(common)
 add_subdirectory(dp_aggregator)
 add_subdirectory(ip_activity2)
@@ -15,7 +20,7 @@ add_subdirectory(recog)
 # CPack configuration for RPM packaging
 include(InstallRequiredSystemLibraries)
 set(CPACK_PACKAGE_NAME "nemea-adict")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_VERSION "${package_version}")
 set(CPACK_PACKAGE_RELEASE 1)
 set(CPACK_PACKAGE_CONTACT "Ondrej Sedlacek <ondrej.sedlacek@cesnet.cz>")
 set(CPACK_PACKAGE_VENDOR "CESNET z.s.p.o.")
