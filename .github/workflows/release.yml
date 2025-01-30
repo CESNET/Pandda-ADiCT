@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*" # Run workflow on version tags
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set metadata
+        run: |
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Install dependencies
+        run: sudo apt update && sudo apt-get install -y make cmake rpm
+
+      - name: Setup Node and npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Package ADiCT lite
+        run: |
+          cd dp3_server
+          mkdir build
+          cd build
+          cmake .. -Dpackage_version=$VERSION
+          make package
+
+      - name: Package GUI
+        run: |
+          cd frontend
+          mkdir build
+          cd build
+          cmake .. -Dpackage_version=$VERSION
+          make package
+
+      - name: Package NEMEA modules
+        run: |
+          cd nemea_modules
+          make pkg package_version=$VERSION
+
+      - name: Create Github release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            dp3_server/build/*.rpm
+            frontend/build/*.rpm
+            nemea_modules/build/*.rpm
