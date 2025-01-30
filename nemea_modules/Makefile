@@ -9,7 +9,7 @@ clean:
 
 .PHONY: build
 build:
-	mkdir -p build/ && cd $(BUILDDIR) && cmake -DCMAKE_INSTALL_PREFIX=/usr -Wdev ..
+	mkdir -p build/ && cd $(BUILDDIR) && cmake -DCMAKE_INSTALL_PREFIX=/usr -Dpackage_version=${package_version} -Wdev ..
 
 .PHONY: pkg
 pkg: build
