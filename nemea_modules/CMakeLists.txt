@@ -1,3 +1,4 @@
+add_subdirectory(common)
 add_subdirectory(dp_aggregator)
 add_subdirectory(ip_activity2)
 add_subdirectory(nemea_adict_sender)
