@@ -25,6 +25,7 @@ set(CPACK_RPM_PACKAGE_ARCHITECTURE "noarch")
 set(CPACK_RPM_PACKAGE_RELOCATABLE OFF)
 set(CPACK_RPM_PACKAGE_REQUIRES "")
 set(CPACK_RPM_BUILDREQUIRES "cmake >= 3.12")
+set(CPACK_RPM_PACKAGE_LICENSE "BSD-3-Clause")
 set(CPACK_RPM_SOURCE_PKG_BUILD_PARAMS "-Dpackage_version=${package_version}")
 set(CPACK_SOURCE_IGNORE_FILES "build;\.env;\.venv;env;venv;__pycache__")
 
