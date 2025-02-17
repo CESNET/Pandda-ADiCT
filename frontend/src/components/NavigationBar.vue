@@ -6,7 +6,7 @@ import { RouterLink } from 'vue-router'
   <nav class="navbar bg-body-tertiary">
     <div class="container">
       <RouterLink :to="{ name: 'home' }" class="navbar-brand">
-        <img src="@/assets/logo.svg" alt="PANDDA" class="logo">
+        <img src="@/assets/logo.svg" alt="PANDDA" class="logo" />
       </RouterLink>
     </div>
   </nav>
