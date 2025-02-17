@@ -23,6 +23,7 @@ set(CPACK_RPM_PACKAGE_ARCHITECTURE "noarch")
 set(CPACK_RPM_PACKAGE_RELOCATABLE OFF)
 set(CPACK_RPM_PACKAGE_REQUIRES "pandda_adict == ${package_version}, nginx")
 set(CPACK_RPM_BUILDREQUIRES "cmake >= 3.12, nodejs >= 1:18, npm >= 1:10")
+set(CPACK_RPM_PACKAGE_LICENSE "BSD-3-Clause")
 set(CPACK_RPM_SOURCE_PKG_BUILD_PARAMS "-Dpackage_version=${package_version}")
 set(CPACK_SOURCE_IGNORE_FILES "build;dist;node_modules;.*\.local")
 
