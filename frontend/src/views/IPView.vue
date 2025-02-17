@@ -245,7 +245,8 @@ watch(dt, async () => {
                 <VTooltip class="d-inline-block ms-2">
                   <i class="fa fa-info text-secondary"></i>
                   <template #popper>
-                    Service and operating system identifiers parsed from recog SMTP attribute values.
+                    Service and operating system identifiers parsed from recog SMTP attribute
+                    values.
                   </template>
                 </VTooltip>
               </h6>
