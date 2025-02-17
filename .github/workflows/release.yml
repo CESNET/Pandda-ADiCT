@@ -8,30 +8,23 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    container: fedora:latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set metadata
         run: |
+          mkdir ~/.config
           echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+          cat << EOF > ~/.config/copr
+          ${{ secrets.COPR_CONFIG }}
+          EOF
         shell: bash
 
       - name: Install dependencies
         run: |
-          # Remove existing cmake installation
-          # This is needed because full path of `cmake` is embedded
-          # (https://gitlab.kitware.com/cmake/cmake/-/commit/611ad194991950ed32189d7314bdbb6cb7cc673b)
-          # into generated source RPM packages. Path `/usr/local/bin/cmake`
-          # is non-standard and doesn't work outside Github action.
-          rm -f /usr/local/bin/cmake
-
-          sudo apt update && sudo apt-get install -y make cmake rpm
-
-      - name: Setup Node and npm
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
+          dnf install -y nodejs npm make cmake rpm-build copr-cli
 
       - name: Package ADiCT lite
         run: |
@@ -63,9 +56,16 @@ jobs:
       - name: Create Github release
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          draft: false
           generate_release_notes: true
           files: |
             dp3_server/build/*.rpm
             frontend/build/*.rpm
             nemea_modules/build/*.rpm
+
+      - name: Publish packages to COPR
+        run: |
+          copr build @CESNET/NEMEA-stable \
+            dp3_server/build/*.src.rpm \
+            frontend/build/*.src.rpm \
+            nemea_modules/build/*.src.rpm
