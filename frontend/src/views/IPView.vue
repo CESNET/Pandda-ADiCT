@@ -213,6 +213,14 @@ watch(dt, async () => {
           </h4>
           <div v-if="snapshots.length > 0">
             <div class="mb-3">
+              <h6>Activity</h6>
+              <ActivityTimeline
+                v-if="masterRecord.activity && masterRecord.activity.length > 0"
+                :activity="masterRecord.activity"
+              />
+              <div v-else class="alert alert-info">No data</div>
+            </div>
+            <div class="mb-3">
               <h6>Open ports</h6>
               <ObservationsTimeline
                 id="open_ports"
@@ -257,14 +265,6 @@ watch(dt, async () => {
                 :isArrayType="true"
                 :valueMapper="stringifyRecogValue"
               />
-            </div>
-            <div class="mb-3">
-              <h6>Activity</h6>
-              <ActivityTimeline
-                v-if="masterRecord.activity && masterRecord.activity.length > 0"
-                :activity="masterRecord.activity"
-              />
-              <div v-else class="alert alert-info">No data</div>
             </div>
           </div>
           <div v-else class="alert alert-info">No snapshots</div>
