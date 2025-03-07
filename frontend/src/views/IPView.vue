@@ -10,6 +10,8 @@ import ActivityClassBadge from '@/components/ActivityClassBadge.vue'
 import ActivityTimeline from '@/components/ActivityTimeline.vue'
 import ObservationsTimeline from '@/components/ObservationsTimeline.vue'
 import OpenResolverBadge from '@/components/OpenResolverBadge.vue'
+import SnapshotsTimePickerHistoryPermalinkButton from '@/components/SnapshotsTimePickerHistoryPermalinkButton.vue'
+import SnapshotsTimePickerLatestDataPermalinkButton from '@/components/SnapshotsTimePickerLatestDataPermalinkButton.vue'
 import SnapshotsTimePickerUrlSync from '@/components/SnapshotsTimePickerUrlSync.vue'
 
 const getData = inject('getData')
@@ -157,6 +159,11 @@ onMounted(async () => {
                 >{{ dayjs.utc(pickedSnapshot?._time_created).local().format('DD.MM. HH:mm') }}
               </span>
             </div>
+            <SnapshotsTimePickerLatestDataPermalinkButton
+              v-if="timePickerState.latest"
+              class="btn-sm ms-2"
+              :time-picker-state="timePickerState"
+            />
           </h4>
           <div class="row">
             <div class="col col-md-4">
@@ -225,6 +232,11 @@ onMounted(async () => {
         <div>
           <h4 class="my-3">
             <span>History</span>
+            <SnapshotsTimePickerHistoryPermalinkButton
+              v-if="timePickerState.latest"
+              class="btn-sm ms-2"
+              :time-picker-state="timePickerState"
+            />
           </h4>
           <div v-if="snapshots.length > 0">
             <div class="mb-3">
