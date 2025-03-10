@@ -244,6 +244,7 @@ onMounted(async () => {
               <ActivityTimeline
                 v-if="masterRecord.activity && masterRecord.activity.length > 0"
                 :activity="masterRecord.activity"
+                :time-picker-state="timePickerState"
               />
               <div v-else class="alert alert-info">No data</div>
             </div>
@@ -252,7 +253,7 @@ onMounted(async () => {
               <ObservationsTimeline
                 id="open_ports"
                 :snapshots="snapshots"
-                :latestSnapshot="pickedSnapshot"
+                :time-picker-state="timePickerState"
                 :isArrayType="true"
               />
             </div>
@@ -269,7 +270,7 @@ onMounted(async () => {
               <ObservationsTimeline
                 id="recog_ssh"
                 :snapshots="snapshots"
-                :latestSnapshot="pickedSnapshot"
+                :time-picker-state="timePickerState"
                 :isArrayType="true"
                 :valueMapper="stringifyRecogValue"
               />
@@ -288,7 +289,7 @@ onMounted(async () => {
               <ObservationsTimeline
                 id="recog_smtp"
                 :snapshots="snapshots"
-                :latestSnapshot="pickedSnapshot"
+                :time-picker-state="timePickerState"
                 :isArrayType="true"
                 :valueMapper="stringifyRecogValue"
               />

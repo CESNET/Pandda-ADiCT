@@ -19,6 +19,10 @@ const props = defineProps({
       return []
     },
   },
+  timePickerState: {
+    type: Object,
+    required: true,
+  },
   isArrayType: {
     type: Boolean,
     default: false,
@@ -50,10 +54,10 @@ const chartOptions = computed(() => {
     },
   }
 
-  if (props.snapshots.length > 0) {
+  if (props.timePickerState.from && props.timePickerState.to) {
     // + 'Z' to treat as UTC
-    scaleXOptions.min = new Date(props.snapshots[0].ts + 'Z')
-    scaleXOptions.max = new Date(props.snapshots[props.snapshots.length - 1].ts + 'Z')
+    scaleXOptions.min = new Date(props.timePickerState.from + 'Z')
+    scaleXOptions.max = new Date(props.timePickerState.to + 'Z')
   }
 
   return {
