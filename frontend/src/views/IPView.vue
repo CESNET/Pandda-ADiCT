@@ -129,7 +129,7 @@ onMounted(async () => {
   <main class="py-4">
     <div class="container">
       <div class="row mb-5">
-        <div class="col col-md-7 title">
+        <div class="col col-lg-7 title">
           <h4>IP detail</h4>
           <h1 class="h2 fw-bold">{{ $route.params.eid }}</h1>
           <div class="h3 row g-2">
@@ -142,7 +142,7 @@ onMounted(async () => {
             </div>
           </div>
         </div>
-        <div class="col col-md-5">
+        <div class="col col-lg-5">
           <SnapshotsTimePickerUrlSync @update:timePickerState="updateTimePickerState" />
         </div>
       </div>
