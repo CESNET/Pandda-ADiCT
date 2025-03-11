@@ -168,7 +168,7 @@ onMounted(async () => {
         </div>
 
         <div v-if="pickedSnapshot">
-          <h4 class="my-3 d-flex align-items-center flex-wrap">
+          <h4 class="mt-4 mb-3 d-flex align-items-center flex-wrap">
             <span v-if="timePickerState.latest">Latest data</span>
             <span v-else>Snapshot</span>
             <div class="d-inline-block ms-2 fs-5">
@@ -177,11 +177,14 @@ onMounted(async () => {
                 >{{ dayjs.utc(pickedSnapshot?._time_created).local().format('DD.MM. HH:mm') }}
               </span>
             </div>
-            <SnapshotsTimePickerLatestDataPermalinkButton
-              v-if="timePickerState.latest"
-              class="btn-sm ms-2"
-              :time-picker-state="timePickerState"
-            />
+            <VTooltip>
+              <SnapshotsTimePickerLatestDataPermalinkButton
+                v-if="timePickerState.latest"
+                class="btn-sm ms-2"
+                :time-picker-state="timePickerState"
+              />
+              <template #popper>Permalink to displayed latest data</template>
+            </VTooltip>
           </h4>
           <div class="row">
             <div class="col col-md-4">
@@ -248,13 +251,16 @@ onMounted(async () => {
         <div v-else class="alert alert-info">No data in picked snapshot</div>
 
         <div>
-          <h4 class="my-3">
+          <h4 class="mt-4 mb-3">
             <span>History</span>
-            <SnapshotsTimePickerHistoryPermalinkButton
-              v-if="timePickerState.latest"
-              class="btn-sm ms-2"
-              :time-picker-state="timePickerState"
-            />
+            <VTooltip class="d-inline-block">
+              <SnapshotsTimePickerHistoryPermalinkButton
+                v-if="timePickerState.latest"
+                class="btn-sm ms-2"
+                :time-picker-state="timePickerState"
+              />
+              <template #popper>Permalink to displayed history and activity charts</template>
+            </VTooltip>
           </h4>
           <div v-if="snapshots.length > 0">
             <div class="mb-3">
