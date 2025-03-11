@@ -2,9 +2,10 @@
 import { computed } from 'vue'
 import { Line } from 'vue-chartjs'
 import { Chart as ChartJS, registerables } from 'chart.js'
+import annotationPlugin from 'chartjs-plugin-annotation'
 import 'chartjs-adapter-date-fns'
 
-ChartJS.register(...registerables)
+ChartJS.register(...registerables, annotationPlugin)
 ChartJS.defaults.color = '#dee2e6'
 ChartJS.defaults.borderColor = '#495057'
 
@@ -15,6 +16,10 @@ const props = defineProps({
   },
   timePickerState: {
     type: Object,
+    required: true,
+  },
+  pickedSnapshotTs: {
+    type: Date,
     required: true,
   },
 })
@@ -87,6 +92,17 @@ const chartOptions = computed(() => {
           label: (item) => {
             let unit = CHART_UNITS[item.datasetIndex]
             return `${item.formattedValue} ${unit}`
+          },
+        },
+      },
+      annotation: {
+        annotations: {
+          line1: {
+            type: 'line',
+            xMin: props.pickedSnapshotTs,
+            xMax: props.pickedSnapshotTs,
+            borderColor: '#d980fa',
+            borderWidth: 2,
           },
         },
       },

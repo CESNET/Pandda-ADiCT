@@ -58,6 +58,11 @@ const pickedSnapshot = computed(() => {
   }
 })
 
+// Shortcut for picked snapshot timestamp
+const pickedSnapshotTs = computed(() => {
+  return dayjs.utc(pickedSnapshot.value?._time_created).local()
+})
+
 /**
  * Stringifies recog-attribute value
  *
@@ -163,6 +168,7 @@ onMounted(async () => {
             v-if="masterRecord.activity && masterRecord.activity.length > 0"
             :activity="masterRecord.activity"
             :time-picker-state="timePickerState"
+            :picked-snapshot-ts="pickedSnapshotTs.toDate()"
           />
           <div v-else class="alert alert-info">No data</div>
         </div>
@@ -172,9 +178,8 @@ onMounted(async () => {
             <span v-if="timePickerState.latest">Latest data</span>
             <span v-else>Snapshot</span>
             <div class="d-inline-block ms-2 fs-5">
-              <span class="badge rounded-pill border text-secondary">
-                <i class="fa fa-clock-o me-2"></i
-                >{{ dayjs.utc(pickedSnapshot?._time_created).local().format('DD.MM. HH:mm') }}
+              <span class="badge rounded-pill border snapshot-date-badge">
+                <i class="fa fa-clock-o me-2"></i>{{ pickedSnapshotTs.format('DD.MM. HH:mm') }}
               </span>
             </div>
             <VTooltip>
@@ -269,6 +274,7 @@ onMounted(async () => {
                 id="open_ports"
                 :snapshots="snapshots"
                 :time-picker-state="timePickerState"
+                :picked-snapshot-ts="pickedSnapshotTs.toDate()"
                 :isArrayType="true"
               />
             </div>
@@ -286,6 +292,7 @@ onMounted(async () => {
                 id="recog_ssh"
                 :snapshots="snapshots"
                 :time-picker-state="timePickerState"
+                :picked-snapshot-ts="pickedSnapshotTs.toDate()"
                 :isArrayType="true"
                 :valueMapper="stringifyRecogValue"
               />
@@ -305,6 +312,7 @@ onMounted(async () => {
                 id="recog_smtp"
                 :snapshots="snapshots"
                 :time-picker-state="timePickerState"
+                :picked-snapshot-ts="pickedSnapshotTs.toDate()"
                 :isArrayType="true"
                 :valueMapper="stringifyRecogValue"
               />
@@ -321,5 +329,10 @@ onMounted(async () => {
 <style lang="css" scoped>
 pre {
   color: var(--bs-code-color);
+}
+
+.snapshot-date-badge {
+  color: #d980fa;
+  border-color: #d980fa !important;
 }
 </style>
