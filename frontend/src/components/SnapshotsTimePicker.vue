@@ -51,6 +51,27 @@ const rangesIndex = computed(() => {
   return nearestIndex
 })
 
+/**
+ * Returns smaller increment/decrement for the picked timestamp based
+ * on the `range`
+ *
+ * If the range is <= 24 hours, the timestamp should be incremented by 1 hour.
+ * If the range is <= 3 days, the timestamp should be incremented by 6 hours.
+ * If the range is <= 5 days, the timestamp should be incremented by 12 hours.
+ * Otherwise, the timestamp should be incremented by 24 hours.
+ */
+const smallTimeMovement = computed(() => {
+  if (range.value <= 24 * 60) {
+    return 60
+  } else if (range.value <= 3 * 24 * 60) {
+    return 6 * 60
+  } else if (range.value <= 5 * 24 * 60) {
+    return 12 * 60
+  } else {
+    return 24 * 60
+  }
+})
+
 const emit = defineEmits(['update:timePickerState'])
 
 /**
@@ -190,10 +211,16 @@ watch([latest, ts, range], () => {
             </div>
             <div class="btn-group w-100 mt-1" role="group">
               <div class="btn btn-secondary" @click="ts = ts.subtract(range, 'minute')">
-                <i class="fa fa-arrow-left"></i>
+                <i class="fa fa-angle-double-left"></i>
+              </div>
+              <div class="btn btn-secondary" @click="ts = ts.subtract(smallTimeMovement, 'minute')">
+                <i class="fa fa-angle-left"></i>
+              </div>
+              <div class="btn btn-secondary" @click="ts = ts.add(smallTimeMovement, 'minute')">
+                <i class="fa fa-angle-right"></i>
               </div>
               <div class="btn btn-secondary" @click="ts = ts.add(range, 'minute')">
-                <i class="fa fa-arrow-right"></i>
+                <i class="fa fa-angle-double-right"></i>
               </div>
             </div>
           </div>
