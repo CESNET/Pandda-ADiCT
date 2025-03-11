@@ -149,6 +149,24 @@ onMounted(async () => {
 
       <div v-if="empty" class="alert alert-info">No data for selected datetime in DP³</div>
       <div v-else-if="loaded">
+        <div>
+          <h4 class="my-3">
+            <span>Activity</span>
+            <VTooltip class="d-inline-block ms-2 fs-5">
+              <i class="fa fa-info text-secondary"></i>
+              <template #popper>
+                Permalink to this section is identical to the history permalink (below).
+              </template>
+            </VTooltip>
+          </h4>
+          <ActivityTimeline
+            v-if="masterRecord.activity && masterRecord.activity.length > 0"
+            :activity="masterRecord.activity"
+            :time-picker-state="timePickerState"
+          />
+          <div v-else class="alert alert-info">No data</div>
+        </div>
+
         <div v-if="pickedSnapshot">
           <h4 class="my-3 d-flex align-items-center flex-wrap">
             <span v-if="timePickerState.latest">Latest data</span>
@@ -239,15 +257,6 @@ onMounted(async () => {
             />
           </h4>
           <div v-if="snapshots.length > 0">
-            <div class="mb-3">
-              <h6>Activity</h6>
-              <ActivityTimeline
-                v-if="masterRecord.activity && masterRecord.activity.length > 0"
-                :activity="masterRecord.activity"
-                :time-picker-state="timePickerState"
-              />
-              <div v-else class="alert alert-info">No data</div>
-            </div>
             <div class="mb-3">
               <h6>Open ports</h6>
               <ObservationsTimeline
