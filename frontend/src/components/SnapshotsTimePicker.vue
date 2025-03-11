@@ -145,7 +145,7 @@ watch([latest, ts, range], () => {
       <div v-if="latest">
         <div class="btn-group w-100" role="group">
           <div
-            v-for="rangesElement in RANGES"
+            v-for="rangesElement in RANGES.slice().reverse()"
             :key="rangesElement.value"
             class="btn"
             :class="{
@@ -160,17 +160,17 @@ watch([latest, ts, range], () => {
         <div class="btn-group w-100 mt-1" role="group">
           <button
             class="btn btn-secondary"
-            @click="range = RANGES[rangesIndex - 1].value"
-            :disabled="rangesIndex == 0"
-          >
-            <i class="fa fa-search-plus"></i>
-          </button>
-          <button
-            class="btn btn-secondary"
             @click="range = RANGES[rangesIndex + 1].value"
             :disabled="rangesIndex == RANGES.length - 1"
           >
             <i class="fa fa-search-minus"></i>
+          </button>
+          <button
+            class="btn btn-secondary"
+            @click="range = RANGES[rangesIndex - 1].value"
+            :disabled="rangesIndex == 0"
+          >
+            <i class="fa fa-search-plus"></i>
           </button>
         </div>
       </div>
