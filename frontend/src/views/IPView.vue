@@ -173,7 +173,7 @@ onMounted(async () => {
           <div v-else class="alert alert-info">No data</div>
         </div>
 
-        <div v-if="pickedSnapshot">
+        <div>
           <h4 class="mt-4 mb-3 d-flex align-items-center flex-wrap">
             <span v-if="timePickerState.latest">Latest data</span>
             <span v-else>Snapshot</span>
@@ -191,7 +191,7 @@ onMounted(async () => {
               <template #popper>Permalink to displayed latest data</template>
             </VTooltip>
           </h4>
-          <div class="row">
+          <div v-if="pickedSnapshot" class="row">
             <div class="col col-md-4">
               <h6>
                 Open ports
@@ -252,8 +252,8 @@ onMounted(async () => {
               <div v-else class="alert alert-info">No data</div>
             </div>
           </div>
+          <div v-else class="alert alert-info">No data in picked snapshot</div>
         </div>
-        <div v-else class="alert alert-info">No data in picked snapshot</div>
 
         <div>
           <h4 class="mt-4 mb-3">
