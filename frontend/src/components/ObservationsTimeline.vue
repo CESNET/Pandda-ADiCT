@@ -5,6 +5,12 @@ import { Chart as ChartJS, registerables } from 'chart.js'
 import annotationPlugin from 'chartjs-plugin-annotation'
 import 'chartjs-adapter-date-fns'
 
+import {
+  CHART_COMMON_OPTIONS,
+  CHART_SCALE_X_OPTIONS,
+  setChartDatetimeRange,
+} from '@/utils/commonCharts.js'
+
 ChartJS.register(...registerables, annotationPlugin)
 ChartJS.defaults.color = '#dee2e6'
 ChartJS.defaults.borderColor = '#495057'
@@ -39,33 +45,13 @@ const props = defineProps({
 })
 
 const chartOptions = computed(() => {
-  let scaleXOptions = {
-    type: 'time',
-    time: {
-      displayFormats: {
-        millisecond: 'HH:mm:ss.SSS',
-        second: 'HH:mm:ss',
-        minute: 'HH:mm',
-        hour: 'HH:mm',
-      },
-      tooltipFormat: 'dd.MM. HH:mm',
-    },
-    ticks: {
-      autoSkip: false,
-      maxRotation: 0,
-      major: {
-        enabled: true,
-      },
-    },
-  }
+  let scaleXOptions = { ...CHART_SCALE_X_OPTIONS }
 
-  if (props.timePickerState.from && props.timePickerState.to) {
-    // + 'Z' to treat as UTC
-    scaleXOptions.min = new Date(props.timePickerState.from + 'Z')
-    scaleXOptions.max = new Date(props.timePickerState.to + 'Z')
-  }
+  // Set the time range of the chart
+  setChartDatetimeRange(scaleXOptions, props.timePickerState.from, props.timePickerState.to)
 
   return {
+    ...CHART_COMMON_OPTIONS,
     scales: {
       x: scaleXOptions,
       y: {
@@ -102,10 +88,6 @@ const chartOptions = computed(() => {
         },
       },
     },
-    animation: {
-      duration: 0,
-    },
-    maintainAspectRatio: false,
   }
 })
 const chartData = computed(() => {
