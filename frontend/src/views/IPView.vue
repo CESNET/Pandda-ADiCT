@@ -25,6 +25,8 @@ const timePickerState = ref({
   picked: null,
   latest: null,
   range: null,
+  resampleUnitCount: null,
+  resampleUnit: null,
 })
 
 const masterRecord = ref({})
@@ -169,6 +171,8 @@ onMounted(async () => {
             :activity="masterRecord.activity"
             :time-picker-state="timePickerState"
             :picked-snapshot-ts="pickedSnapshotTs.toDate()"
+            :resample-unit-count="timePickerState.resampleUnitCount"
+            :resample-unit="timePickerState.resampleUnit"
           />
           <div v-else class="alert alert-info">No data</div>
         </div>
@@ -275,6 +279,8 @@ onMounted(async () => {
                 :snapshots="snapshots"
                 :time-picker-state="timePickerState"
                 :picked-snapshot-ts="pickedSnapshotTs.toDate()"
+                :resample-unit-count="timePickerState.resampleUnitCount"
+                :resample-unit="timePickerState.resampleUnit"
                 :isArrayType="true"
               />
             </div>
@@ -293,6 +299,8 @@ onMounted(async () => {
                 :snapshots="snapshots"
                 :time-picker-state="timePickerState"
                 :picked-snapshot-ts="pickedSnapshotTs.toDate()"
+                :resample-unit-count="timePickerState.resampleUnitCount"
+                :resample-unit="timePickerState.resampleUnit"
                 :isArrayType="true"
                 :valueMapper="stringifyRecogValue"
               />
@@ -313,6 +321,8 @@ onMounted(async () => {
                 :snapshots="snapshots"
                 :time-picker-state="timePickerState"
                 :picked-snapshot-ts="pickedSnapshotTs.toDate()"
+                :resample-unit-count="timePickerState.resampleUnitCount"
+                :resample-unit="timePickerState.resampleUnit"
                 :isArrayType="true"
                 :valueMapper="stringifyRecogValue"
               />

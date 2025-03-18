@@ -8,6 +8,7 @@ import 'chartjs-adapter-date-fns'
 import {
   CHART_COMMON_OPTIONS,
   CHART_SCALE_X_OPTIONS,
+  resampleTimedData,
   setChartDatetimeRange,
 } from '@/utils/commonCharts.js'
 
@@ -26,6 +27,14 @@ const props = defineProps({
   },
   pickedSnapshotTs: {
     type: Date,
+    required: true,
+  },
+  resampleUnitCount: {
+    type: Number,
+    required: true,
+  },
+  resampleUnit: {
+    type: String,
     required: true,
   },
 })
@@ -96,7 +105,7 @@ const chartOptions = computed(() => {
   }
 })
 const chartData = computed(() => {
-  const data = props.activity.map((dp) => {
+  let data = props.activity.map((dp) => {
     return {
       t: new Date(dp.t2 + 'Z'),
       packets: dp.v.packets,
@@ -104,6 +113,24 @@ const chartData = computed(() => {
       bytes: dp.v.bytes,
     }
   })
+
+  // Resample data to avoid too many points
+  data = resampleTimedData(
+    data,
+    't',
+    props.resampleUnitCount,
+    props.resampleUnit,
+    (bucketData, bucketDt) => {
+      return [
+        {
+          t: bucketDt,
+          packets: bucketData.reduce((acc, dp) => acc + dp.packets, 0),
+          flows: bucketData.reduce((acc, dp) => acc + dp.flows, 0),
+          bytes: bucketData.reduce((acc, dp) => acc + dp.bytes, 0),
+        },
+      ]
+    },
+  )
 
   return {
     datasets: [

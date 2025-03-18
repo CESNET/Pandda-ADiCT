@@ -8,6 +8,7 @@ import 'chartjs-adapter-date-fns'
 import {
   CHART_COMMON_OPTIONS,
   CHART_SCALE_X_OPTIONS,
+  resampleTimedData,
   setChartDatetimeRange,
 } from '@/utils/commonCharts.js'
 
@@ -32,6 +33,14 @@ const props = defineProps({
   },
   pickedSnapshotTs: {
     type: Date,
+    required: true,
+  },
+  resampleUnitCount: {
+    type: Number,
+    required: true,
+  },
+  resampleUnit: {
+    type: String,
     required: true,
   },
   isArrayType: {
@@ -103,7 +112,11 @@ const chartData = computed(() => {
 
   for (const s of props.snapshots) {
     // + 'Z' to treat as UTC
-    const ts = new Date(s._time_created + 'Z')
+    let ts = new Date(s._time_created + 'Z')
+
+    // Snapshots are created with small offset after each hour, remove this offset
+    ts.setSeconds(0)
+    ts.setMilliseconds(0)
 
     if (props.isArrayType) {
       if (!s[props.id]) {
@@ -115,6 +128,37 @@ const chartData = computed(() => {
       dataset.push(dataConv(ts, s[props.id], s[props.id + '#c']))
     }
   }
+
+  // Resample data to avoid too many points
+  dataset = resampleTimedData(
+    dataset,
+    'x',
+    props.resampleUnitCount,
+    props.resampleUnit,
+    (bucketData, bucketDt) => {
+      let valuesConfidences = {}
+
+      // Calculate the average confidence for each value
+      for (const d of bucketData) {
+        if (!valuesConfidences[d.y]) {
+          valuesConfidences[d.y] = { sum: 0, count: 0 }
+        }
+        valuesConfidences[d.y].sum += d.c
+        valuesConfidences[d.y].count++
+      }
+
+      let result = []
+      for (const key in valuesConfidences) {
+        result.push({
+          x: bucketDt,
+          y: key,
+          c: valuesConfidences[key].sum / valuesConfidences[key].count,
+        })
+      }
+
+      return result
+    },
+  )
 
   return {
     datasets: [

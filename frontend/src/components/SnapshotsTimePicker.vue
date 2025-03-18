@@ -7,12 +7,12 @@ import utc from 'dayjs/plugin/utc'
 dayjs.extend(utc)
 
 const RANGES = [
-  { value: 24 * 60, title: '24h' },
-  { value: 2 * 24 * 60, title: '2d' },
-  { value: 4 * 24 * 60, title: '4d' },
-  { value: 7 * 24 * 60, title: '1w' },
-  { value: 14 * 24 * 60, title: '14d' },
-  { value: 30 * 24 * 60, title: '30d' },
+  { value: 24 * 60, title: '24h', resampleUnitCount: 1, resampleUnit: 'hour' },
+  { value: 2 * 24 * 60, title: '2d', resampleUnitCount: 1, resampleUnit: 'hour' },
+  { value: 4 * 24 * 60, title: '4d', resampleUnitCount: 1, resampleUnit: 'hour' },
+  { value: 7 * 24 * 60, title: '1w', resampleUnitCount: 2, resampleUnit: 'hour' },
+  { value: 14 * 24 * 60, title: '14d', resampleUnitCount: 4, resampleUnit: 'hour' },
+  { value: 30 * 24 * 60, title: '30d', resampleUnitCount: 8, resampleUnit: 'hour' },
 ]
 
 // Models
@@ -138,6 +138,8 @@ function calculateTimePickerState() {
     picked: dayjsToShortISO(ts.value.utc()),
     latest: latest.value,
     range: range.value,
+    resampleUnitCount: RANGES[rangesIndex.value].resampleUnitCount,
+    resampleUnit: RANGES[rangesIndex.value].resampleUnit,
   }
 }
 
