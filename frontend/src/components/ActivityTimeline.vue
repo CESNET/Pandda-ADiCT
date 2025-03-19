@@ -50,6 +50,10 @@ const chartOptions = computed(() => {
 
   return {
     ...CHART_COMMON_OPTIONS,
+    interaction: {
+      intersect: false,
+      mode: 'index',
+    },
     scales: {
       x: scaleXOptions,
       packets: {
@@ -89,6 +93,7 @@ const chartOptions = computed(() => {
             return `${item.formattedValue} ${unit}`
           },
         },
+        usePointStyle: true,
       },
       annotation: {
         annotations: {
@@ -143,8 +148,10 @@ const chartData = computed(() => {
           yAxisKey: 'packets',
         },
         borderColor: CHART_COLORS[0],
-        pointRadius: 4,
-        pointHitRadius: 5,
+        pointRadius: 6,
+        pointHoverRadius: 6,
+        pointHitRadius: 7,
+        pointStyle: 'rect',
       },
       {
         label: 'Flows',
@@ -155,8 +162,10 @@ const chartData = computed(() => {
           yAxisKey: 'flows',
         },
         borderColor: CHART_COLORS[1],
-        pointRadius: 4,
-        pointHitRadius: 5,
+        pointRadius: 6,
+        pointHoverRadius: 6,
+        pointHitRadius: 7,
+        pointStyle: 'circle',
       },
       {
         label: 'Bytes',
@@ -167,8 +176,10 @@ const chartData = computed(() => {
           yAxisKey: 'bytes',
         },
         borderColor: CHART_COLORS[2],
-        pointRadius: 4,
-        pointHitRadius: 5,
+        pointRadius: 6,
+        pointHoverRadius: 6,
+        pointHitRadius: 7,
+        pointStyle: 'star',
       },
     ],
   }
