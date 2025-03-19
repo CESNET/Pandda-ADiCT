@@ -2,9 +2,17 @@
 import { computed } from 'vue'
 import { Line } from 'vue-chartjs'
 import { Chart as ChartJS, registerables } from 'chart.js'
+import annotationPlugin from 'chartjs-plugin-annotation'
 import 'chartjs-adapter-date-fns'
 
-ChartJS.register(...registerables)
+import {
+  CHART_COMMON_OPTIONS,
+  CHART_SCALE_X_OPTIONS,
+  resampleTimedData,
+  setChartDatetimeRange,
+} from '@/utils/commonCharts.js'
+
+ChartJS.register(...registerables, annotationPlugin)
 ChartJS.defaults.color = '#dee2e6'
 ChartJS.defaults.borderColor = '#495057'
 
@@ -13,39 +21,39 @@ const props = defineProps({
     type: Array,
     required: true,
   },
+  timePickerState: {
+    type: Object,
+    required: true,
+  },
+  pickedSnapshotTs: {
+    type: Date,
+    required: true,
+  },
+  resampleUnitCount: {
+    type: Number,
+    required: true,
+  },
+  resampleUnit: {
+    type: String,
+    required: true,
+  },
 })
 
 const CHART_UNITS = ['pkt', 'flw', 'B']
 const CHART_COLORS = ['#0DCAF0', '#198754', '#FFC107']
 
 const chartOptions = computed(() => {
-  let scaleXOptions = {
-    type: 'time',
-    time: {
-      displayFormats: {
-        millisecond: 'HH:mm:ss.SSS',
-        second: 'HH:mm:ss',
-        minute: 'HH:mm',
-        hour: 'HH:mm',
-      },
-      tooltipFormat: 'dd.MM. HH:mm',
-    },
-    ticks: {
-      autoSkip: false,
-      maxRotation: 0,
-      major: {
-        enabled: true,
-      },
-    },
-  }
+  let scaleXOptions = { ...CHART_SCALE_X_OPTIONS }
 
-  if (props.activity.length > 0) {
-    // + 'Z' to treat as UTC
-    scaleXOptions.min = new Date(props.activity[0].t2 + 'Z')
-    scaleXOptions.max = new Date(props.activity[props.activity.length - 1].t2 + 'Z')
-  }
+  // Set the time range of the chart
+  setChartDatetimeRange(scaleXOptions, props.timePickerState.from, props.timePickerState.to)
 
   return {
+    ...CHART_COMMON_OPTIONS,
+    interaction: {
+      intersect: false,
+      mode: 'index',
+    },
     scales: {
       x: scaleXOptions,
       packets: {
@@ -85,16 +93,24 @@ const chartOptions = computed(() => {
             return `${item.formattedValue} ${unit}`
           },
         },
+        usePointStyle: true,
+      },
+      annotation: {
+        annotations: {
+          line1: {
+            type: 'line',
+            xMin: props.pickedSnapshotTs,
+            xMax: props.pickedSnapshotTs,
+            borderColor: '#d980fa',
+            borderWidth: 2,
+          },
+        },
       },
     },
-    animation: {
-      duration: 0,
-    },
-    maintainAspectRatio: false,
   }
 })
 const chartData = computed(() => {
-  const data = props.activity.map((dp) => {
+  let data = props.activity.map((dp) => {
     return {
       t: new Date(dp.t2 + 'Z'),
       packets: dp.v.packets,
@@ -102,6 +118,24 @@ const chartData = computed(() => {
       bytes: dp.v.bytes,
     }
   })
+
+  // Resample data to avoid too many points
+  data = resampleTimedData(
+    data,
+    't',
+    props.resampleUnitCount,
+    props.resampleUnit,
+    (bucketData, bucketDt) => {
+      return [
+        {
+          t: bucketDt,
+          packets: bucketData.reduce((acc, dp) => acc + dp.packets, 0),
+          flows: bucketData.reduce((acc, dp) => acc + dp.flows, 0),
+          bytes: bucketData.reduce((acc, dp) => acc + dp.bytes, 0),
+        },
+      ]
+    },
+  )
 
   return {
     datasets: [
@@ -114,8 +148,10 @@ const chartData = computed(() => {
           yAxisKey: 'packets',
         },
         borderColor: CHART_COLORS[0],
-        pointRadius: 4,
-        pointHitRadius: 5,
+        pointRadius: 6,
+        pointHoverRadius: 6,
+        pointHitRadius: 7,
+        pointStyle: 'rect',
       },
       {
         label: 'Flows',
@@ -126,8 +162,10 @@ const chartData = computed(() => {
           yAxisKey: 'flows',
         },
         borderColor: CHART_COLORS[1],
-        pointRadius: 4,
-        pointHitRadius: 5,
+        pointRadius: 6,
+        pointHoverRadius: 6,
+        pointHitRadius: 7,
+        pointStyle: 'circle',
       },
       {
         label: 'Bytes',
@@ -138,8 +176,10 @@ const chartData = computed(() => {
           yAxisKey: 'bytes',
         },
         borderColor: CHART_COLORS[2],
-        pointRadius: 4,
-        pointHitRadius: 5,
+        pointRadius: 6,
+        pointHoverRadius: 6,
+        pointHitRadius: 7,
+        pointStyle: 'star',
       },
     ],
   }

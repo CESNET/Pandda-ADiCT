@@ -1,6 +1,6 @@
 <script setup>
-import { computed, inject, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, inject, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
@@ -10,27 +10,59 @@ import ActivityClassBadge from '@/components/ActivityClassBadge.vue'
 import ActivityTimeline from '@/components/ActivityTimeline.vue'
 import ObservationsTimeline from '@/components/ObservationsTimeline.vue'
 import OpenResolverBadge from '@/components/OpenResolverBadge.vue'
-import TimelineSelect from '@/components/TimelineSelect.vue'
+import SnapshotsTimePickerHistoryPermalinkButton from '@/components/SnapshotsTimePickerHistoryPermalinkButton.vue'
+import SnapshotsTimePickerLatestDataPermalinkButton from '@/components/SnapshotsTimePickerLatestDataPermalinkButton.vue'
+import SnapshotsTimePickerUrlSync from '@/components/SnapshotsTimePickerUrlSync.vue'
 
 const getData = inject('getData')
 const route = useRoute()
-const router = useRouter()
 
 const empty = ref(false)
 const loaded = ref(false)
-const dt = ref(route.query.dt)
-const dt_from = computed(() => {
-  return dayjs(dt.value).subtract(24, 'hour').format('YYYY-MM-DDTHH:mm')
+const timePickerState = ref({
+  from: null,
+  to: null,
+  picked: null,
+  latest: null,
+  range: null,
+  resampleUnitCount: null,
+  resampleUnit: null,
 })
 
 const masterRecord = ref({})
 const snapshots = ref([])
-const latestSnapshot = computed(() => {
+
+// Picked snapshot is either:
+// - latest one if `timePickerState.latest == true`
+// - the last one before midpoint of the selected interval otherwise
+//   (midpoint is `timePickerState.picked`)
+const pickedSnapshot = computed(() => {
   if (snapshots.value.length > 0) {
-    return snapshots.value[snapshots.value.length - 1]
+    if (timePickerState.value.latest) {
+      // Select last (latest) one
+      return snapshots.value[snapshots.value.length - 1]
+    } else {
+      // Find "midpoint"
+      let midpointSnapshot = null
+      let minTsDiff = Infinity
+      for (let i = 0; i < snapshots.value.length; i++) {
+        let snapshotTs = dayjs(snapshots.value[i]._time_created).millisecond(0).second(0)
+        let tsDiff = dayjs(timePickerState.value.picked).diff(snapshotTs)
+        if (tsDiff >= 0 && tsDiff < minTsDiff) {
+          minTsDiff = tsDiff
+          midpointSnapshot = snapshots.value[i]
+        }
+      }
+      return midpointSnapshot
+    }
   } else {
-    return {}
+    return null
   }
+})
+
+// Shortcut for picked snapshot timestamp
+const pickedSnapshotTs = computed(() => {
+  return dayjs.utc(pickedSnapshot.value?._time_created).local()
 })
 
 /**
@@ -70,25 +102,14 @@ function stringifyRecogValue(v) {
 }
 
 /**
- * Replaces the route with current parameters
- */
-function replaceRoute() {
-  router.replace({
-    query: {
-      dt: dt.value,
-    },
-  })
-}
-
-/**
  * Loads data
  */
 async function load() {
   // Load IP detail
   const data = await getData('/entity/ip/' + route.params.eid, {
     params: {
-      date_from: dt_from.value,
-      date_to: dt.value,
+      date_from: timePickerState.value.from,
+      date_to: timePickerState.value.to,
     },
   })
 
@@ -97,49 +118,84 @@ async function load() {
   empty.value = data.empty
 }
 
+/**
+ * Hook to update `timePickerState` value and reload data
+ */
+async function updateTimePickerState(newTimePickerState) {
+  timePickerState.value = newTimePickerState
+  await load()
+}
+
 onMounted(async () => {
   await load()
   loaded.value = true
-})
-
-watch(dt, async () => {
-  replaceRoute()
-  await load()
 })
 </script>
 
 <template>
   <main class="py-4">
     <div class="container">
-      <TimelineSelect v-model="dt" class="mb-4" />
-
-      <div class="title mb-5">
-        <h4>IP detail</h4>
-        <h1 class="h2 fw-bold">{{ $route.params.eid }}</h1>
-        <div class="h3 row g-2">
-          <div class="col col-auto" v-if="latestSnapshot?.hostname">
-            <span class="badge text-bg-secondary me-2 mb-1">
-              {{ latestSnapshot?.hostname }}
-            </span>
-            <ActivityClassBadge :value="latestSnapshot?.activity_class" class="me-2 mb-1" />
-            <OpenResolverBadge :value="latestSnapshot?.open_resolver" class="me-2 mb-1" />
+      <div class="row mb-5">
+        <div class="col col-lg-7 title">
+          <h4>IP detail</h4>
+          <h1 class="h2 fw-bold">{{ $route.params.eid }}</h1>
+          <div class="h3 row g-2">
+            <div class="col col-auto" v-if="pickedSnapshot?.hostname">
+              <span class="badge text-bg-secondary me-2 mb-1">
+                {{ pickedSnapshot?.hostname }}
+              </span>
+              <ActivityClassBadge :value="pickedSnapshot?.activity_class" class="me-2 mb-1" />
+              <OpenResolverBadge :value="pickedSnapshot?.open_resolver" class="me-2 mb-1" />
+            </div>
           </div>
+        </div>
+        <div class="col col-lg-5">
+          <SnapshotsTimePickerUrlSync @update:timePickerState="updateTimePickerState" />
         </div>
       </div>
 
       <div v-if="empty" class="alert alert-info">No data for selected datetime in DP³</div>
       <div v-else-if="loaded">
-        <div v-if="snapshots.length > 0">
-          <h4 class="my-3 d-flex align-items-center">
-            <span>Latest data</span>
+        <div>
+          <h4 class="my-3">
+            <span>Activity</span>
+            <VTooltip class="d-inline-block ms-2 fs-5">
+              <i class="fa fa-info text-secondary"></i>
+              <template #popper>
+                Permalink to this section is identical to the history permalink (below).
+              </template>
+            </VTooltip>
+          </h4>
+          <ActivityTimeline
+            v-if="masterRecord.activity && masterRecord.activity.length > 0"
+            :activity="masterRecord.activity"
+            :time-picker-state="timePickerState"
+            :picked-snapshot-ts="pickedSnapshotTs.toDate()"
+            :resample-unit-count="timePickerState.resampleUnitCount"
+            :resample-unit="timePickerState.resampleUnit"
+          />
+          <div v-else class="alert alert-info">No data</div>
+        </div>
+
+        <div>
+          <h4 class="mt-4 mb-3 d-flex align-items-center flex-wrap">
+            <span v-if="timePickerState.latest">Latest data</span>
+            <span v-else>Snapshot</span>
             <div class="d-inline-block ms-2 fs-5">
-              <span class="badge rounded-pill border text-secondary">
-                <i class="fa fa-clock-o me-2"></i
-                >{{ dayjs.utc(latestSnapshot?._time_created).local().format('DD.MM. HH:mm') }}
+              <span class="badge rounded-pill border snapshot-date-badge">
+                <i class="fa fa-clock-o me-2"></i>{{ pickedSnapshotTs.format('DD.MM. HH:mm') }}
               </span>
             </div>
+            <VTooltip>
+              <SnapshotsTimePickerLatestDataPermalinkButton
+                v-if="timePickerState.latest"
+                class="btn-sm ms-2"
+                :time-picker-state="timePickerState"
+              />
+              <template #popper>Permalink to displayed latest data</template>
+            </VTooltip>
           </h4>
-          <div class="row">
+          <div v-if="pickedSnapshot" class="row">
             <div class="col col-md-4">
               <h6>
                 Open ports
@@ -153,15 +209,15 @@ watch(dt, async () => {
                   </template>
                 </VTooltip>
               </h6>
-              <div v-if="(latestSnapshot?.open_ports || []).length > 0">
+              <div v-if="(pickedSnapshot?.open_ports || []).length > 0">
                 <div
-                  v-for="(port, i) in latestSnapshot?.open_ports.sort((a, b) => a - b)"
+                  v-for="(port, i) in pickedSnapshot?.open_ports.sort((a, b) => a - b)"
                   v-bind:key="i"
                   class="mb-2"
                 >
                   <span class="badge bg-light text-dark fs-6">{{ port }}</span>
                   <span class="opacity-50 ms-1">
-                    ({{ Math.round(100 * latestSnapshot['open_ports#c'][i]) }} % confidence)
+                    ({{ Math.round(100 * pickedSnapshot['open_ports#c'][i]) }} % confidence)
                   </span>
                 </div>
               </div>
@@ -178,8 +234,8 @@ watch(dt, async () => {
                   </template>
                 </VTooltip>
               </h6>
-              <pre v-if="latestSnapshot?.recog_ssh">{{
-                JSON.stringify(latestSnapshot?.recog_ssh, null, 2)
+              <pre v-if="pickedSnapshot?.recog_ssh">{{
+                JSON.stringify(pickedSnapshot?.recog_ssh, null, 2)
               }}</pre>
               <div v-else class="alert alert-info">No data</div>
             </div>
@@ -194,38 +250,37 @@ watch(dt, async () => {
                   </template>
                 </VTooltip>
               </h6>
-              <pre v-if="latestSnapshot?.recog_smtp">{{
-                JSON.stringify(latestSnapshot?.recog_smtp, null, 2)
+              <pre v-if="pickedSnapshot?.recog_smtp">{{
+                JSON.stringify(pickedSnapshot?.recog_smtp, null, 2)
               }}</pre>
               <div v-else class="alert alert-info">No data</div>
             </div>
           </div>
+          <div v-else class="alert alert-info">No data in picked snapshot</div>
         </div>
-        <div v-else class="alert alert-info">No data in latest snapshot</div>
 
         <div>
-          <h4>
-            History
-            <VTooltip class="d-inline-block my-3">
-              <i class="fa fa-info text-secondary fs-5"></i>
-              <template #popper> 24-hour window until selected timestamp. </template>
+          <h4 class="mt-4 mb-3">
+            <span>History</span>
+            <VTooltip class="d-inline-block">
+              <SnapshotsTimePickerHistoryPermalinkButton
+                v-if="timePickerState.latest"
+                class="btn-sm ms-2"
+                :time-picker-state="timePickerState"
+              />
+              <template #popper>Permalink to displayed history and activity charts</template>
             </VTooltip>
           </h4>
           <div v-if="snapshots.length > 0">
-            <div class="mb-3">
-              <h6>Activity</h6>
-              <ActivityTimeline
-                v-if="masterRecord.activity && masterRecord.activity.length > 0"
-                :activity="masterRecord.activity"
-              />
-              <div v-else class="alert alert-info">No data</div>
-            </div>
             <div class="mb-3">
               <h6>Open ports</h6>
               <ObservationsTimeline
                 id="open_ports"
                 :snapshots="snapshots"
-                :latestSnapshot="latestSnapshot"
+                :time-picker-state="timePickerState"
+                :picked-snapshot-ts="pickedSnapshotTs.toDate()"
+                :resample-unit-count="timePickerState.resampleUnitCount"
+                :resample-unit="timePickerState.resampleUnit"
                 :isArrayType="true"
               />
             </div>
@@ -242,7 +297,10 @@ watch(dt, async () => {
               <ObservationsTimeline
                 id="recog_ssh"
                 :snapshots="snapshots"
-                :latestSnapshot="latestSnapshot"
+                :time-picker-state="timePickerState"
+                :picked-snapshot-ts="pickedSnapshotTs.toDate()"
+                :resample-unit-count="timePickerState.resampleUnitCount"
+                :resample-unit="timePickerState.resampleUnit"
                 :isArrayType="true"
                 :valueMapper="stringifyRecogValue"
               />
@@ -261,7 +319,10 @@ watch(dt, async () => {
               <ObservationsTimeline
                 id="recog_smtp"
                 :snapshots="snapshots"
-                :latestSnapshot="latestSnapshot"
+                :time-picker-state="timePickerState"
+                :picked-snapshot-ts="pickedSnapshotTs.toDate()"
+                :resample-unit-count="timePickerState.resampleUnitCount"
+                :resample-unit="timePickerState.resampleUnit"
                 :isArrayType="true"
                 :valueMapper="stringifyRecogValue"
               />
@@ -278,5 +339,10 @@ watch(dt, async () => {
 <style lang="css" scoped>
 pre {
   color: var(--bs-code-color);
+}
+
+.snapshot-date-badge {
+  color: #d980fa;
+  border-color: #d980fa !important;
 }
 </style>
