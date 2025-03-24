@@ -22,9 +22,19 @@ jobs:
           EOF
         shell: bash
 
+      # `sqlite` and `sqlite-devel` packages are apparently needed for NodeJS
+      # 22.14. Otherwise this symbol lookup error is thrown:
+      # ```
+      # /usr/bin/node-22: symbol lookup error: /lib64/libnode.so.127: undefined symbol: sqlite3session_attach
+      # ```
+      # This is a workaround until the issue is resolved. We are not using SQLite in the project.
       - name: Install dependencies
         run: |
-          dnf install -y nodejs npm make cmake rpm-build copr-cli
+          dnf install -y \
+            nodejs npm \
+            make cmake \
+            rpm-build copr-cli \
+            sqlite sqlite-devel
 
       - name: Package ADiCT lite
         run: |
