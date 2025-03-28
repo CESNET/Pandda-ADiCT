@@ -1,6 +1,6 @@
 // Common charts options and functions
 
-import { dateCeil } from './datetime'
+import { dateFloor } from './datetime'
 
 /**
  * Chart.js options for the X axis
@@ -77,7 +77,7 @@ export function resampleTimedData(data, dtKey, unitCount, unit, reduceFn) {
 
   // Split data into buckets
   for (const item of data) {
-    const bucketKey = dateCeil(item[dtKey], unitCount, unit).getTime()
+    const bucketKey = dateFloor(item[dtKey], unitCount, unit).getTime()
     if (!buckets.has(bucketKey)) {
       buckets.set(bucketKey, [])
     }
