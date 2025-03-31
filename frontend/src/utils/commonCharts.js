@@ -72,7 +72,7 @@ export function resampleTimedData(data, dtKey, unitCount, unit, reduceFn) {
     return []
   }
 
-  // Map to guarantee insertion order
+  // Map instead of object to allow for `Date` keys
   let buckets = new Map()
 
   // Split data into buckets
@@ -90,5 +90,7 @@ export function resampleTimedData(data, dtKey, unitCount, unit, reduceFn) {
     let bucketDt = new Date(key)
     result.push(...reduceFn(bucket, bucketDt).map((item) => ({ [dtKey]: bucketDt, ...item })))
   }
-  return result
+
+  // Ensure correct order of buckets
+  return result.sort((a, b) => a[dtKey] - b[dtKey])
 }
