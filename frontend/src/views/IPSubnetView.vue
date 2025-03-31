@@ -45,6 +45,10 @@ const addressCount = computed(() => {
   if (subnetInvalid.value) {
     return 0
   }
+  if (subnet.value.bitmask >= 31) {
+    // Special case for /31 and /32 due to RFC 3021
+    return subnet.value.size
+  }
   return subnet.value.size - 2
 })
 
