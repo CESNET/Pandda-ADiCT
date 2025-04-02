@@ -137,6 +137,23 @@ const chartData = computed(() => {
     },
   )
 
+  // Round number of packets, flows, and bytes
+  // Only applied to values >= 10. This is to avoid confusion, because user
+  // doesn't expect to see 102.34 bytes transferred. For smaller values, it
+  // might be better to show the exact value.
+  // (This is due to redistribution of long flows into smaller time windows.)
+  for (const dp of data) {
+    if (dp.packets >= 10) {
+      dp.packets = Math.round(dp.packets)
+    }
+    if (dp.flows >= 10) {
+      dp.flows = Math.round(dp.flows)
+    }
+    if (dp.bytes >= 10) {
+      dp.bytes = Math.round(dp.bytes)
+    }
+  }
+
   return {
     datasets: [
       {
