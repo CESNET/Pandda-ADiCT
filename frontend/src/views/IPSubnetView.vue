@@ -116,6 +116,9 @@ async function load() {
   }
   loading.value = true
 
+  // Store current route
+  const loadingRoute = route.fullPath
+
   // Reset activity
   activity.value = []
   addressesLoaded.value = 0
@@ -128,6 +131,11 @@ async function load() {
 
   // Load data in batches
   for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
+    if (route.fullPath !== loadingRoute) {
+      // Route has changed, stop loading new batches
+      break
+    }
+
     const batch = addresses.slice(i, i + BATCH_SIZE)
 
     // Load batch
