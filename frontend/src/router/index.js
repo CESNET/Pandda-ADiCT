@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
+import IPSubnetLandingView from '../views/IPSubnetLandingView.vue'
+import IPSubnetView from '../views/IPSubnetView.vue'
 import IPView from '../views/IPView.vue'
 
 const router = createRouter({
@@ -14,6 +16,16 @@ const router = createRouter({
       path: '/ip/:eid',
       name: 'ip',
       component: IPView,
+    },
+    {
+      path: '/ip_subnet',
+      name: 'ip_subnet_landing',
+      component: IPSubnetLandingView,
+    },
+    {
+      path: '/ip_subnet/:ip/:prefix',
+      name: 'ip_subnet',
+      component: IPSubnetView,
     },
   ],
 })
