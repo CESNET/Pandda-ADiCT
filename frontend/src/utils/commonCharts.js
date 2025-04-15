@@ -1,6 +1,6 @@
 // Common charts options and functions
 
-import { dateFloor } from './datetime'
+import { dateFloor, durationMs } from './datetime'
 
 /**
  * Chart.js options for the X axis
@@ -64,10 +64,13 @@ export function setChartDatetimeRange(chartScaleXOptions, dtFrom, dtTo) {
  * @param {Function} reduceFn Function to reduce data of a single bucket.
  *   Should take arguments (bucketData, bucketDt) and return array of one
  *   or more objects.
+ * @param {Boolean} addEmptyBuckets If true, empty buckets will be added
+ *   to the result. If false, only buckets with data will be returned.
+ *   Default is true.
  * @returns {Array} Array of objects with the same keys as the `data` objects,
  *   but reduced and rounded to the nearest bucket
  */
-export function resampleTimedData(data, dtKey, unitCount, unit, reduceFn) {
+export function resampleTimedData(data, dtKey, unitCount, unit, reduceFn, addEmptyBuckets = true) {
   if (!data) {
     return []
   }
@@ -82,6 +85,19 @@ export function resampleTimedData(data, dtKey, unitCount, unit, reduceFn) {
       buckets.set(bucketKey, [])
     }
     buckets.get(bucketKey).push(item)
+  }
+
+  // If empty buckets are requested, add them
+  if (addEmptyBuckets && buckets.size > 0) {
+    const bucketKeys = Array.from(buckets.keys())
+    const minKey = Math.min(...bucketKeys)
+    const maxKey = Math.max(...bucketKeys)
+    const increment = durationMs(unitCount, unit)
+    for (let key = minKey; key <= maxKey; key += increment) {
+      if (!buckets.has(key)) {
+        buckets.set(key, [])
+      }
+    }
   }
 
   // Reduce each bucket and convert to array
