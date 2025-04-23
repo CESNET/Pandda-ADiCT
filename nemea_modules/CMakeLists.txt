@@ -4,7 +4,7 @@ project(adict_nemea_packages VERSION 1.0.0 DESCRIPTION "NEMEA Packages for ADiCT
 
 add_subdirectory(common)
 add_subdirectory(dp_aggregator)
-add_subdirectory(ip_activity2)
+add_subdirectory(ip_activity)
 add_subdirectory(nemea_adict_sender)
 add_subdirectory(open_ports)
 add_subdirectory(recog)
