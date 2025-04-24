@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
 """
-Count number of flows, packets and bytes sent and received by each IP address (in specified networks) per configurable
-time interval.
-This variant uses bidirectional flows and counts both outgoing and incoming traffic (so even an inactive address,
-such as a device turned off, can exhibit some (incoming) activity, e.g. because of scans).
+Count number of flows, packets and bytes sent and received by each IP address
+(in specified networks) per configurable time interval.
+This variant uses bidirectional flows and counts both outgoing and incoming
+traffic (so even an inactive address, such as a device turned off, can exhibit
+some (incoming) activity, e.g. because of scans).
 """
 
 import signal
@@ -22,7 +23,10 @@ import pytrap
 sys.path.insert(0, str(Path(__file__).parent.parent / "common"))
 from ip_network_filter import IPNetworks
 
-inputspec = "ipaddr DST_IP,ipaddr SRC_IP,uint64 BYTES,time TIME_FIRST,time TIME_LAST,uint32 PACKETS"
+inputspec = (
+    "ipaddr DST_IP,ipaddr SRC_IP,uint64 BYTES,time TIME_FIRST,"
+    "time TIME_LAST,uint32 PACKETS"
+)
 
 verbose = False
 stop = False  # global flag to stop reading
@@ -150,7 +154,7 @@ def _ip_filtering(networks: IPNetworks, ip: pytrap.UnirecIPAddr):
     return not networks.networks or ip in networks
 
 
-def _insert_flow(
+def _insert_flow(  # noqa PLR0913
     data_table,
     slot,
     ip,
@@ -169,10 +173,12 @@ def _insert_flow(
     ip: ip address whose counters to increment
     in_bytes: number of incoming bytes
     in_packets: number of incoming packets
-    in_flow_fraction: fraction of the flow that is in the slot (only used when a flow spans multiple slots, otherwise 1)
+    in_flow_fraction: fraction of the flow that is in the slot (only used when
+        a flow spans multiple slots, otherwise 1)
     out_bytes: number of outgoing bytes
     out_packets: number of outgoing packets
-    out_flow_fraction: fraction of the flow that is in the slot (only used when a flow spans multiple slots, otherwise 1)
+    out_flow_fraction: fraction of the flow that is in the slot (only used when
+        a flow spans multiple slots, otherwise 1)
     """
 
     # only increment the number of flows if some data went in that direction
@@ -201,10 +207,10 @@ def _insert_flow(
 def data_aggregation(
     data_table: dict, interval: int, trap, networks: IPNetworks, biflow: bool
 ):
-    """Aggregate incoming flow records into an appropriate time period in timeline.
-    If record lasted throughout multiple time periods, it is divided and values are
-    interpolated into multiple smaller records, which are then counted to corresponding
-    time periods."""
+    """Aggregate incoming flow records into an appropriate time period in
+    timeline. If record lasted throughout multiple time periods, it is divided
+    and values are interpolated into multiple smaller records, which are then
+    counted to corresponding time periods."""
 
     src_ip = trap.return_src_ip()
     dst_ip = trap.return_dst_ip()
@@ -230,19 +236,22 @@ def data_aggregation(
     slot = floor_time(flow_start, interval)  # time of beginning of this slot/interval
 
     if flow_end - slot > timedelta(seconds=interval):
-        # Flow spans multiple time intervals - divide it to multiple bins proportionally
+        # Flow spans multiple time intervals
+        # Divide it to multiple bins proportionally
         flow_duration = (flow_end - flow_start).total_seconds()
 
         while flow_end - slot > timedelta(seconds=0):
             interval_end = slot + timedelta(seconds=interval)
-            if interval_end > flow_end:
-                interval_end = flow_end
+            interval_end = min(interval_end, flow_end)
 
             if slot not in data_table:
                 # needed slot not in the table (anymore), put data into the oldest one
-                oldest_slot = list(sorted(data_table.keys()))[0]
+                oldest_slot = sorted(data_table.keys())[0]
                 print(
-                    f"Warning: Encountered a flow belonging to slot {slot} which was already sent out (current time: {current_time}). Adding it to the oldest available slot ({oldest_slot}). The '--maxage' parameter needs to be increased!",
+                    f"Warning: Encountered a flow belonging to slot {slot} "
+                    f"which was already sent out (current time: {current_time}). "
+                    f"Adding it to the oldest available slot ({oldest_slot}). "
+                    "The '--maxage' parameter needs to be increased!",
                     file=sys.stderr,
                 )
                 slot = oldest_slot
@@ -253,7 +262,8 @@ def data_aggregation(
             frac = duration / flow_duration  # fraction of the flow in this slot
 
             if src_filter:
-                # increment counters for SRC_IP of this flow (incoming = BYTES_REV, outgoing = BYTES)
+                # increment counters for SRC_IP of this flow
+                # (incoming = BYTES_REV, outgoing = BYTES)
                 _insert_flow(
                     data_table,
                     slot,
@@ -267,7 +277,8 @@ def data_aggregation(
                 )
 
             if dst_filter:
-                # increment counters for DST_IP of this flow (incoming = BYTES, outgoing = BYTES_REV)
+                # increment counters for DST_IP of this flow
+                # (incoming = BYTES, outgoing = BYTES_REV)
                 _insert_flow(
                     data_table,
                     slot,
@@ -287,22 +298,27 @@ def data_aggregation(
         # flow lies in a single interval - simply increment counters
         if slot not in data_table:
             # needed slot not in the table (anymore), put data into the oldest one
-            oldest_slot = list(sorted(data_table.keys()))[0]
+            oldest_slot = sorted(data_table.keys())[0]
             if not insufficient_maxage_warning_printed:
                 print(
-                    f"Warning: Encountered a flow belonging to slot {slot} which was already sent out (current time: {current_time}). Adding it to the oldest available slot ({oldest_slot}). The '--maxage' parameter needs to be increased!",
+                    f"Warning: Encountered a flow belonging to slot {slot} "
+                    f"which was already sent out (current time: {current_time}). "
+                    f"Adding it to the oldest available slot ({oldest_slot}). "
+                    "The '--maxage' parameter needs to be increased!",
                     file=sys.stderr,
                 )
             slot = oldest_slot
 
         if src_filter:
-            # increment counters for SRC_IP of this flow (incoming = BYTES_REV, outgoing = BYTES)
+            # increment counters for SRC_IP of this flow
+            # (incoming = BYTES_REV, outgoing = BYTES)
             _insert_flow(
                 data_table, slot, src_ip, bytes_rev, packets_rev, 1, bytes, packets, 1
             )
 
         if dst_filter:
-            # increment counters for DST_IP of this flow (incoming = BYTES, outgoing = BYTES_REV)
+            # increment counters for DST_IP of this flow
+            # (incoming = BYTES, outgoing = BYTES_REV)
             _insert_flow(
                 data_table, slot, dst_ip, bytes, packets, 1, bytes_rev, packets_rev, 1
             )
@@ -332,9 +348,11 @@ def _post_data(trap, interval, queue, src_tag):
                     "t1": t_start,
                     "t2": t_end,
                     "v": {
-                        # Each value must be wrapped in a list, because this is an attribute of "time-series" type.
-                        # As such, the value is expected to contain lists of numbers (one per each time slot).
-                        # Even though we only send one value for each series, is still needs to be a list.
+                        # Each value must be wrapped in a list, because this is
+                        # an attribute of "time-series" type. As such, the value
+                        # is expected to contain lists of numbers (one per each
+                        # time slot). Even though we only send one value for
+                        # each series, is still needs to be a list.
                         "in_flows": [float(round(vals["in_flows"], 4))],
                         "in_packets": [float(round(vals["in_packets"], 4))],
                         "in_bytes": [float(round(vals["in_bytes"], 4))],
@@ -357,14 +375,16 @@ def _post_data(trap, interval, queue, src_tag):
 def stop_program(signum, frame):
     global stop  # noqa PLW0603
     stop = True
-    # Reset signal handlers to default, so second signal closes the program immediately
+    # Reset signal handlers to default, so second signal closes
+    # the program immediately
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
     signal.signal(signal.SIGABRT, signal.SIG_DFL)
     if verbose:
         print(
-            "Signal received. Going to stop the program after the cached data are sent."
-            " Press Ctrl-C again to exit immediately."
+            "Signal received. "
+            "Going to stop the program after the cached data are sent. "
+            "Press Ctrl-C again to exit immediately."
         )
 
 
@@ -377,12 +397,14 @@ def input_processing(trap: TrapIfc, interval, src_tag, maxage, networks: IPNetwo
 
     ip: ip addresses for which are data stored in current interval
     """
-    global current_time, insufficient_maxage_warning_printed
+    global current_time, insufficient_maxage_warning_printed  # noqa PLW0603
 
-    # data_table = main data structure containing counters of flows/packets/bytes for each time slot and IP address
+    # data_table = main data structure containing counters of flows/packets/bytes
+    # for each time slot and IP address
     # Format of data table is: {time -> {ip -> {in/out_flows/packets/bytes}}}
-    #   dict items: 'in_flows', 'in_packets', 'in_bytes', 'out_flows', 'out_packets', 'out_bytes'
-    data_table = dict()
+    #   dict items: 'in_flows', 'in_packets', 'in_bytes',
+    #               'out_flows', 'out_packets', 'out_bytes'
+    data_table = {}
 
     # current time = the maximum of all flow_end timestamps seen
     current_time = None
@@ -417,7 +439,7 @@ def input_processing(trap: TrapIfc, interval, src_tag, maxage, networks: IPNetwo
         elif current_time < trap.return_time("TIME_LAST"):
             current_time = trap.return_time("TIME_LAST")
             # If some interval is older than max age, add it to the queue for send
-            for time in list(sorted(data_table.keys())):
+            for time in sorted(data_table.keys()):
                 if current_time - time > timedelta(seconds=maxage):
                     queue.put((time, data_table[time]), block=True)
                     data_table.pop(time)
@@ -425,11 +447,14 @@ def input_processing(trap: TrapIfc, interval, src_tag, maxage, networks: IPNetwo
         while slot < current_time:
             slot = next(generator)
             data_table[slot] = {}
-            insufficient_maxage_warning_printed = False  # reset flag, so the warning can be printed again in the next slot if needed
+
+            # reset flag, so the warning can be printed again
+            # in the next slot if needed
+            insufficient_maxage_warning_printed = False
 
         if biflow is None:
             try:
-                packets = trap.return_packets_rev()
+                _packets = trap.return_packets_rev()
                 biflow = True
             except AttributeError:
                 biflow = False
@@ -437,7 +462,7 @@ def input_processing(trap: TrapIfc, interval, src_tag, maxage, networks: IPNetwo
         data_aggregation(data_table, interval, trap, networks, biflow)
 
     # receive finished, put everything in the queue to send
-    for time in list(sorted(data_table.keys())):
+    for time in sorted(data_table.keys()):
         queue.put((time, data_table[time]), block=True)
 
     # signal for thread to end
@@ -456,10 +481,11 @@ def replace_traphelp_in_argv(args):
 
 def parse_arguments():
     parser = ArgumentParser(
-        description="ADiCT input module. Collect input flows, aggregate and send them "
-        "as IP Activity intervals to the trap interface. It counts number"
-        "of flows, packets and bytes sent and received by IP address in each interval. "
-        "JSON formatted datapoints are sent to output Trap IFC."
+        description="ADiCT input module. Collect input flows, aggregate and "
+        "send them as IP Activity intervals to the trap interface. It counts "
+        "number of flows, packets and bytes sent and received by IP address "
+        "in each interval. JSON formatted datapoints are sent to output Trap "
+        "IFC."
     )
 
     parser.add_argument(
@@ -492,8 +518,8 @@ def parse_arguments():
         "-m",
         "--maxage",
         help=(
-            "Max possible age of incoming data (in seconds). Data of time intervals "
-            "older than this are sent and deleted (default: 20min)."
+            "Max possible age of incoming data (in seconds). Data of time "
+            "intervals older than this are sent and deleted (default: 20min)."
         ),
         type=int,
         default=1200,
@@ -507,9 +533,9 @@ def parse_arguments():
     parser.add_argument(
         "-n",
         "--networks",
-        help="IP networks (in CIDR format) to monitor. Only data of IPs from these "
-        "networks will be included. Multiple networks can be separated by commas "
-        "or spaces (quote the whole list in that case). "
+        help="IP networks (in CIDR format) to monitor. Only data of IPs from "
+        "these networks will be included. Multiple networks can be separated by "
+        "commas or spaces (quote the whole list in that case). "
         "If not set, all IPs are included.",
         type=str,
         metavar="IPs",
