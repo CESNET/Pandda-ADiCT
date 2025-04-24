@@ -73,14 +73,26 @@ function stringifyRecogValue(v) {
             </template>
           </VTooltip>
         </h4>
-        <ActivityTimeline
-          v-if="masterRecord.activity && masterRecord.activity.length > 0"
-          :activity="masterRecord.activity"
-          :time-picker-state="timePickerState"
-          :picked-snapshot-ts="pickedSnapshotTs.toDate()"
-          :resample-unit-count="timePickerState.resampleUnitCount"
-          :resample-unit="timePickerState.resampleUnit"
-        />
+        <div v-if="masterRecord.activity && masterRecord.activity.length > 0">
+          <h6>Outgoing</h6>
+          <ActivityTimeline
+            :activity="masterRecord.activity"
+            :time-picker-state="timePickerState"
+            :picked-snapshot-ts="pickedSnapshotTs.toDate()"
+            :resample-unit-count="timePickerState.resampleUnitCount"
+            :resample-unit="timePickerState.resampleUnit"
+            :incoming-direction="false"
+          />
+          <h6>Incoming</h6>
+          <ActivityTimeline
+            :activity="masterRecord.activity"
+            :time-picker-state="timePickerState"
+            :picked-snapshot-ts="pickedSnapshotTs.toDate()"
+            :resample-unit-count="timePickerState.resampleUnitCount"
+            :resample-unit="timePickerState.resampleUnit"
+            :incoming-direction="true"
+          />
+        </div>
         <div v-else class="alert alert-info">No data</div>
       </div>
 

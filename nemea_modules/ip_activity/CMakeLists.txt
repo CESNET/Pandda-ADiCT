@@ -1,4 +1,4 @@
-install(FILES ip_activity2.py
+install(FILES ip_activity.py
         DESTINATION nemea_adict
         PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
                          GROUP_EXECUTE GROUP_READ
