@@ -187,14 +187,26 @@ async function updateTimePickerState(newTimePickerState) {
               <ProgressBar v-if="loadProgress < 100" :progress="loadProgress" class="w-100 ms-3" />
             </div>
           </h4>
-          <ActivityTimeline
-            v-if="activity.length > 0 || loading"
-            :activity="activity"
-            :time-picker-state="timePickerState"
-            :picked-snapshot-ts="new Date(0)"
-            :resample-unit-count="timePickerState.resampleUnitCount"
-            :resample-unit="timePickerState.resampleUnit"
-          />
+          <div v-if="activity.length > 0 || loading">
+            <h6>Outgoing</h6>
+            <ActivityTimeline
+              :activity="activity"
+              :time-picker-state="timePickerState"
+              :picked-snapshot-ts="new Date(0)"
+              :resample-unit-count="timePickerState.resampleUnitCount"
+              :resample-unit="timePickerState.resampleUnit"
+              :incoming-direction="false"
+            />
+            <h6>Incoming</h6>
+            <ActivityTimeline
+              :activity="activity"
+              :time-picker-state="timePickerState"
+              :picked-snapshot-ts="new Date(0)"
+              :resample-unit-count="timePickerState.resampleUnitCount"
+              :resample-unit="timePickerState.resampleUnit"
+              :incoming-direction="true"
+            />
+          </div>
           <div v-else class="alert alert-info">No data</div>
         </div>
       </div>

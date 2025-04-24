@@ -37,10 +37,16 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  incomingDirection: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const CHART_UNITS = ['pkt', 'flw', 'B']
 const CHART_COLORS = ['#0DCAF0', '#198754', '#FFC107']
+
+const DIRECTION_PREFIX = props.incomingDirection ? 'in_' : 'out_'
 
 const chartOptions = computed(() => {
   let scaleXOptions = { ...CHART_SCALE_X_OPTIONS }
@@ -113,9 +119,9 @@ const chartData = computed(() => {
   let data = props.activity.map((dp) => {
     return {
       t: new Date(dp.t2 + 'Z'),
-      packets: dp.v.packets,
-      flows: dp.v.flows,
-      bytes: dp.v.bytes,
+      packets: dp.v[DIRECTION_PREFIX + 'packets'],
+      flows: dp.v[DIRECTION_PREFIX + 'flows'],
+      bytes: dp.v[DIRECTION_PREFIX + 'bytes'],
     }
   })
 
