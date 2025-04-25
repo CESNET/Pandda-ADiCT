@@ -23,3 +23,23 @@ Clone the repository:
 git clone https://github.com/CESNET/Pandda-ADiCT.git
 cd Pandda-ADiCT
 ```
+
+### Acknowledgement
+
+<div>
+Supported as part of financial support to third parties (FSTP) within the project National Coordination Center in the Czech Republic (NCC-CZ, project no. 101127941) co-financed by the Digital Europe program.
+</div>
+<br>
+
+<div align="center">
+<picture>
+  <img src="https://raw.githubusercontent.com/CESNET/Pandda-ADiCT/refs/heads/main/img/eccc_badge.png?raw=true" width="150">
+</picture>
+<picture>
+  <img src="https://raw.githubusercontent.com/CESNET/Pandda-ADiCT/refs/heads/main/img/ncc_badge.png?raw=true" width="165">
+</picture>
+<picture>
+  <img src="https://raw.githubusercontent.com/CESNET/Pandda-ADiCT/refs/heads/main/img/eu-badge.png?raw=true" width="200">
+</picture>
+</div>
+<br>
