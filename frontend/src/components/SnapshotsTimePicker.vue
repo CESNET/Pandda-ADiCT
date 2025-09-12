@@ -7,6 +7,7 @@ import utc from 'dayjs/plugin/utc'
 dayjs.extend(utc)
 
 const RANGES = [
+  { value: 30, title: '30min', resampleUnitCount: 1, resampleUnit: 'minute' },
   { value: 24 * 60, title: '24h', resampleUnitCount: 1, resampleUnit: 'hour' },
   { value: 2 * 24 * 60, title: '2d', resampleUnitCount: 1, resampleUnit: 'hour' },
   { value: 4 * 24 * 60, title: '4d', resampleUnitCount: 1, resampleUnit: 'hour' },
@@ -61,7 +62,9 @@ const rangesIndex = computed(() => {
  * Otherwise, the timestamp should be incremented by 24 hours.
  */
 const smallTimeMovement = computed(() => {
-  if (range.value <= 24 * 60) {
+  if (range.value <= 30) {
+    return 5
+  } else if (range.value <= 24 * 60) {
     return 60
   } else if (range.value <= 3 * 24 * 60) {
     return 6 * 60
