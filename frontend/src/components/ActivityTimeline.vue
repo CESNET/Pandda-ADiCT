@@ -8,6 +8,7 @@ import 'chartjs-adapter-date-fns'
 import {
   CHART_COMMON_OPTIONS,
   CHART_SCALE_X_OPTIONS,
+  formatSI,
   resampleTimedData,
   setChartDatetimeRange,
   themeTextColor,
@@ -68,7 +69,7 @@ const chartOptions = computed(() => {
       x: scaleXOptions,
       packets: {
         ticks: {
-          callback: (v) => `${v} ${CHART_UNITS[0]}`,
+          callback: (v) => formatSI(v, CHART_UNITS[0]),
           color: CHART_COLORS[0],
         },
         grid: { tickColor: CHART_COLORS[0], drawOnChartArea: false },
@@ -77,7 +78,7 @@ const chartOptions = computed(() => {
       },
       flows: {
         ticks: {
-          callback: (v) => `${v} ${CHART_UNITS[1]}`,
+          callback: (v) => formatSI(v, CHART_UNITS[1]),
           color: CHART_COLORS[1],
         },
         grid: { tickColor: CHART_COLORS[1], drawOnChartArea: false },
@@ -86,7 +87,7 @@ const chartOptions = computed(() => {
       },
       bytes: {
         ticks: {
-          callback: (v) => `${v} ${CHART_UNITS[2]}`,
+          callback: (v) => formatSI(v, CHART_UNITS[2]),
           color: CHART_COLORS[2],
         },
         grid: { tickColor: CHART_COLORS[2] },
@@ -100,7 +101,7 @@ const chartOptions = computed(() => {
         callbacks: {
           label: (item) => {
             let unit = CHART_UNITS[item.datasetIndex]
-            return `${item.formattedValue} ${unit}`
+            return formatSI(item.parsed.y, unit, 2)
           },
         },
         usePointStyle: true,

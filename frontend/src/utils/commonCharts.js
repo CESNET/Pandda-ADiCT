@@ -117,3 +117,30 @@ export function resampleTimedData(data, dtKey, unitCount, unit, reduceFn, addEmp
   // Ensure correct order of buckets
   return result.sort((a, b) => a[dtKey] - b[dtKey])
 }
+
+/**
+ * Formats a number using SI prefixes (k, M, G, ...)
+ *
+ * Values < 1e3 are not formatted.
+ *
+ * @param {Number} value Value to format
+ * @param {String} unit Unit to append to the formatted value (e.g. 'B', 'Hz')
+ * @param {Number} decimalPlaces Number of decimal places to show (only for values
+ *   >= 1e3). Default is 1.
+ * @returns {String} Formatted string
+ */
+export function formatSI(value, unit = '', decimalPlaces = 1) {
+  const absValue = Math.abs(value)
+  if (absValue < 1e3) return `${value} ${unit}`
+
+  const units = ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
+  let i = 0
+  let formattedValue = value
+
+  while (i < units.length - 1 && Math.abs(formattedValue) >= 1e3) {
+    formattedValue /= 1e3
+    i++
+  }
+
+  return `${formattedValue.toFixed(decimalPlaces)} ${units[i]}${unit}`
+}
