@@ -10,10 +10,13 @@ import {
   CHART_SCALE_X_OPTIONS,
   resampleTimedData,
   setChartDatetimeRange,
+  themeTextColor,
 } from '@/utils/commonCharts.js'
+import { useThemeStore } from '@/stores/theme'
+
+const themeStore = useThemeStore()
 
 ChartJS.register(...registerables, annotationPlugin)
-ChartJS.defaults.color = '#dee2e6'
 ChartJS.defaults.borderColor = '#495057'
 
 const props = defineProps({
@@ -44,12 +47,13 @@ const props = defineProps({
 })
 
 const CHART_UNITS = ['pkt', 'flw', 'B']
-const CHART_COLORS = ['#0DCAF0', '#198754', '#FFC107']
+const CHART_COLORS = ['#3498DB', '#198754', '#F39C12']
 
 const DIRECTION_PREFIX = props.incomingDirection ? 'in_' : 'out_'
 
 const chartOptions = computed(() => {
   let scaleXOptions = { ...CHART_SCALE_X_OPTIONS }
+  scaleXOptions.ticks.color = themeTextColor(themeStore.isDark)
 
   // Set the time range of the chart
   setChartDatetimeRange(scaleXOptions, props.timePickerState.from, props.timePickerState.to)

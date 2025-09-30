@@ -10,10 +10,13 @@ import {
   CHART_SCALE_X_OPTIONS,
   resampleTimedData,
   setChartDatetimeRange,
+  themeTextColor,
 } from '@/utils/commonCharts.js'
+import { useThemeStore } from '@/stores/theme'
+
+const themeStore = useThemeStore()
 
 ChartJS.register(...registerables, annotationPlugin)
-ChartJS.defaults.color = '#dee2e6'
 ChartJS.defaults.borderColor = '#495057'
 
 const props = defineProps({
@@ -55,6 +58,7 @@ const props = defineProps({
 
 const chartOptions = computed(() => {
   let scaleXOptions = { ...CHART_SCALE_X_OPTIONS }
+  scaleXOptions.ticks.color = themeTextColor(themeStore.isDark)
 
   // Set the time range of the chart
   setChartDatetimeRange(scaleXOptions, props.timePickerState.from, props.timePickerState.to)
@@ -69,6 +73,7 @@ const chartOptions = computed(() => {
         offset: true,
         ticks: {
           display: true,
+          color: themeTextColor(themeStore.isDark),
         },
         grid: {
           display: false,

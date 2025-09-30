@@ -1,13 +1,15 @@
 <script setup>
-import { inject, provide } from 'vue'
+import { inject, provide, watchEffect } from 'vue'
 import { RouterView } from 'vue-router'
 
 import { useRequestsStateStore } from '@/stores/requestsState'
+import { useThemeStore } from '@/stores/theme'
 import NavigationBar from '@/components/NavigationBar.vue'
 import RequestsState from '@/components/RequestsState.vue'
 
 const axios = inject('axios')
 const requestsState = useRequestsStateStore()
+const theme = useThemeStore()
 
 /**
  * Universal data getter
@@ -27,6 +29,10 @@ async function getData(urlPath, ...params) {
 
 // Provide data getter to whole app
 provide('getData', getData)
+
+watchEffect(() => {
+  document.documentElement.setAttribute('data-bs-theme', theme.theme)
+})
 </script>
 
 <template>
