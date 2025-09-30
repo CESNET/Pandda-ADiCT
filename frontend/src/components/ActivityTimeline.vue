@@ -68,6 +68,7 @@ const chartOptions = computed(() => {
     scales: {
       x: scaleXOptions,
       packets: {
+        display: 'auto',
         ticks: {
           callback: (v) => formatSI(v, CHART_UNITS[0]),
           color: CHART_COLORS[0],
@@ -77,6 +78,7 @@ const chartOptions = computed(() => {
         min: 0,
       },
       flows: {
+        display: 'auto',
         ticks: {
           callback: (v) => formatSI(v, CHART_UNITS[1]),
           color: CHART_COLORS[1],
@@ -86,6 +88,7 @@ const chartOptions = computed(() => {
         min: 0,
       },
       bytes: {
+        display: 'auto',
         ticks: {
           callback: (v) => formatSI(v, CHART_UNITS[2]),
           color: CHART_COLORS[2],
@@ -96,7 +99,10 @@ const chartOptions = computed(() => {
       },
     },
     plugins: {
-      legend: false,
+      legend: {
+        display: true,
+        position: 'top',
+      },
       tooltip: {
         callbacks: {
           label: (item) => {
