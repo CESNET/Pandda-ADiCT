@@ -1,7 +1,11 @@
 <script setup>
 import { RouterLink, useRoute } from 'vue-router'
 
+import { useThemeStore } from '@/stores/theme'
+import ThemeToggle from '@/components/ThemeToggle.vue'
+
 const route = useRoute()
+const theme = useThemeStore()
 </script>
 
 <template>
@@ -9,7 +13,13 @@ const route = useRoute()
     <div class="container">
       <div class="navbar-brand">
         <RouterLink :to="{ name: 'home' }" class="navbar-brand">
-          <img src="@/assets/logo.svg" alt="PANDDA" class="logo" />
+          <img
+            v-if="theme.theme === 'dark'"
+            src="@/assets/logo-white.svg"
+            alt="PANDDA"
+            class="logo"
+          />
+          <img v-else src="@/assets/logo-black.svg" alt="PANDDA" class="logo" />
         </RouterLink>
       </div>
       <button
@@ -19,8 +29,8 @@ const route = useRoute()
       >
         <span class="navbar-toggler-icon"></span>
       </button>
-      <div class="collapse navbar-collapse row" id="navbarSupportedContent">
-        <ul class="navbar-nav px-2">
+      <div class="collapse navbar-collapse" id="navbarSupportedContent">
+        <ul class="navbar-nav px-2 me-auto">
           <li class="nav-item">
             <RouterLink
               :to="{ name: 'home' }"
@@ -42,6 +52,9 @@ const route = useRoute()
             </RouterLink>
           </li>
         </ul>
+        <div class="m-2">
+          <ThemeToggle />
+        </div>
       </div>
     </div>
   </nav>

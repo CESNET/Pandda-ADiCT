@@ -36,6 +36,13 @@ export const CHART_COMMON_OPTIONS = {
 }
 
 /**
+ * Gets text color based on current theme
+ */
+export function themeTextColor(isDark) {
+  return isDark ? '#DEE2E6' : '#212529'
+}
+
+/**
  * Sets chart datetime range if both `dtFrom` and `dtTo` are provided
  * @param {Object} chartScaleXOptions Options for the X axis
  * @param {String} dtFrom Start date and time formatted like "1970-01-01T01:23"
