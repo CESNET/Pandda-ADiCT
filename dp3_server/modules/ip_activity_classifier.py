@@ -7,12 +7,16 @@ from dp3.common.datapoint import DataPointTimeseriesBase
 from dp3.common.task import DataPointTask
 
 
-class IPactivity(BaseModule):
-    def __init__(self, platform_config: PlatformConfig, _, registrar: CallbackRegistrar):
+class IPActivityClassifier(BaseModule):
+    def __init__(
+        self, platform_config: PlatformConfig, _, registrar: CallbackRegistrar
+    ):
         super().__init__(platform_config, {}, registrar)
         registrar.register_on_new_attr_hook(self.processing_function, "ip", "activity")
 
-    def processing_function(self, eid: str, dp: DataPointTimeseriesBase) -> List[DataPointTask]:
+    def processing_function(
+        self, eid: str, dp: DataPointTimeseriesBase
+    ) -> List[DataPointTask]:
         avg_bytes_per_time_step = sum(dp.v.bytes) / len(dp.v.bytes)
 
         act_class = self.ip_act(avg_bytes_per_time_step)
@@ -27,7 +31,7 @@ class IPactivity(BaseModule):
                         "etype": "ip",
                         "eid": eid,
                         "attr": "activity_class",
-                        "src": "secondary/ip_activity",
+                        "src": "secondary/ip_activity_classifier",
                         "v": act_class,
                     }
                 ],
