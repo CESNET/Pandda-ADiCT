@@ -30,6 +30,6 @@ modules_dir: "../modules"
 # extension must be used!
 enabled_modules:
   - "dns_open_resolver"
-  - "ip_activity"
+  - "ip_activity_classifier"
   - "ip_filter"
   - "ip_to_dns_hostname"
