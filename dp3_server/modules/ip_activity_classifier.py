@@ -17,7 +17,7 @@ class IPActivityClassifier(BaseModule):
     def processing_function(
         self, eid: str, dp: DataPointTimeseriesBase
     ) -> List[DataPointTask]:
-        avg_bytes_per_time_step = sum(dp.v.bytes) / len(dp.v.bytes)
+        avg_bytes_per_time_step = sum(dp.v.out_bytes) / len(dp.v.out_bytes)
 
         act_class = self.ip_act(avg_bytes_per_time_step)
 
