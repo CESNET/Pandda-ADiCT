@@ -6,9 +6,12 @@ import { Netmask } from 'netmask'
 import ActivityTimeline from '@/components/ActivityTimeline.vue'
 import ProgressBar from '@/components/ProgressBar.vue'
 import SnapshotsTimePickerUrlSync from '@/components/SnapshotsTimePickerUrlSync.vue'
+import { formatSI } from '@/utils/commonCharts.js'
 
 // Number of IP addresses loaded in parallel
 const BATCH_SIZE = 32
+
+const N_TOP_ACTIVE_IPS = 10
 
 const getData = inject('getData')
 const route = useRoute()
@@ -36,7 +39,108 @@ const timePickerState = ref({
   resampleUnit: null,
 })
 const activity = ref([])
+const activeIps = ref([])
 const addressesLoaded = ref(0)
+const topIncomingSort = ref({ key: 'flows' })
+const topOutgoingSort = ref({ key: 'flows' })
+
+/**
+ * Aggregates flow and byte totals for one IP address from its activity
+ */
+function summarizeActivity(address, addressActivity) {
+  const summary = {
+    eid: address,
+    in_flows: 0,
+    out_flows: 0,
+    in_bytes: 0,
+    out_bytes: 0,
+  }
+
+  for (const dp of addressActivity || []) {
+    summary.in_flows += dp?.v?.in_flows || 0
+    summary.out_flows += dp?.v?.out_flows || 0
+    summary.in_bytes += dp?.v?.in_bytes || 0
+    summary.out_bytes += dp?.v?.out_bytes || 0
+  }
+
+  return summary
+}
+
+/**
+ * Formats value with two decimals and SI unit
+ */
+function formatTwoDecimals(value, unit) {
+  return formatSI(Number(value || 0).toFixed(2), unit)
+}
+
+/**
+ * Gets sort state object for given direction
+ * @returns 'flows' or 'bytes'
+ */
+function getSortState(direction) {
+  return direction === 'in' ? topIncomingSort.value : topOutgoingSort.value
+}
+
+/**
+ * Sets sort key for top active IPs of given direction
+ *
+ * Used to change the sorting.
+ *
+ * @param direction 'in' or 'out'
+ * @param key 'flows' or 'bytes'
+ */
+function setTopActiveIpsSort(direction, key) {
+  const sortState = getSortState(direction)
+
+  sortState.key = key
+}
+
+/**
+ * Gets sort and other keys for given direction and metric key
+ *
+ * @param direction 'in' or 'out'
+ * @param metricKey 'flows' or 'bytes'
+ */
+function getActivitySortKeys(direction, metricKey) {
+  const flowsKey = `${direction}_flows`
+  const bytesKey = `${direction}_bytes`
+
+  return metricKey === 'bytes'
+    ? { sortKey: bytesKey, otherKey: flowsKey }
+    : { sortKey: flowsKey, otherKey: bytesKey }
+}
+
+/**
+ * Returns top N active IPs sorted by selected metric and direction
+ */
+function getTopNActiveIps(direction, n = N_TOP_ACTIVE_IPS) {
+  const sortState = getSortState(direction)
+  const { sortKey, otherKey } = getActivitySortKeys(direction, sortState.key)
+
+  return [...activeIps.value]
+    .sort((a, b) => {
+      if (b[sortKey] !== a[sortKey]) {
+        return b[sortKey] - a[sortKey]
+      }
+
+      if (b[otherKey] !== a[otherKey]) {
+        return b[otherKey] - a[otherKey]
+      }
+
+      return a.eid.localeCompare(b.eid)
+    })
+    .slice(0, n)
+}
+
+// Computed properties for top active IPs and their metric labels
+const topIncomingActiveIps = computed(() => getTopNActiveIps('in'))
+const topOutgoingActiveIps = computed(() => getTopNActiveIps('out'))
+const topIncomingMetricLabel = computed(() =>
+  topIncomingSort.value.key === 'bytes' ? 'bytes' : 'flows',
+)
+const topOutgoingMetricLabel = computed(() =>
+  topOutgoingSort.value.key === 'bytes' ? 'bytes' : 'flows',
+)
 
 /**
  * Number of addresses in subnet
@@ -77,6 +181,8 @@ async function loadAddress(address) {
   if (data?.activity) {
     activity.value = activity.value.concat(data.activity)
   }
+
+  activeIps.value.push(summarizeActivity(address, data?.activity))
 }
 
 /**
@@ -121,6 +227,7 @@ async function load() {
 
   // Reset activity
   activity.value = []
+  activeIps.value = []
   addressesLoaded.value = 0
 
   // Generate list of all addresses in subnet
@@ -209,7 +316,150 @@ async function updateTimePickerState(newTimePickerState) {
           </div>
           <div v-else class="alert alert-info">No data</div>
         </div>
+
+        <div class="mt-5">
+          <h4 class="my-3">Top active IP addresses</h4>
+          <div class="row g-4 align-items-start">
+            <div class="col-12 col-xl-6 top-active-table-col">
+              <h6>Incoming activity (sorted by {{ topIncomingMetricLabel }})</h6>
+              <div v-if="topIncomingActiveIps.length > 0" class="table-responsive">
+                <table class="table table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th scope="col">#</th>
+                      <th scope="col">IP address</th>
+                      <th
+                        scope="col"
+                        class="text-end"
+                        :aria-sort="topIncomingSort.key === 'flows' ? 'descending' : 'none'"
+                      >
+                        <button
+                          type="button"
+                          class="btn btn-link p-0 text-decoration-none text-reset border-0 sort-toggle"
+                          :class="{ active: topIncomingSort.key === 'flows' }"
+                          :aria-pressed="topIncomingSort.key === 'flows'"
+                          @click="setTopActiveIpsSort('in', 'flows')"
+                        >
+                          Flows
+                        </button>
+                      </th>
+                      <th
+                        scope="col"
+                        class="text-end"
+                        :aria-sort="topIncomingSort.key === 'bytes' ? 'descending' : 'none'"
+                      >
+                        <button
+                          type="button"
+                          class="btn btn-link p-0 text-decoration-none text-reset border-0 sort-toggle"
+                          :class="{ active: topIncomingSort.key === 'bytes' }"
+                          :aria-pressed="topIncomingSort.key === 'bytes'"
+                          @click="setTopActiveIpsSort('in', 'bytes')"
+                        >
+                          Bytes
+                        </button>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, index) in topIncomingActiveIps" :key="`in-${item.eid}`">
+                      <th scope="row">{{ index + 1 }}</th>
+                      <td>
+                        <RouterLink
+                          :to="{ name: 'ip', params: { eid: item.eid } }"
+                          class="text-decoration-none"
+                        >
+                          {{ item.eid }}
+                        </RouterLink>
+                      </td>
+                      <td class="text-end">{{ formatTwoDecimals(item.in_flows, 'flw') }}</td>
+                      <td class="text-end">{{ formatTwoDecimals(item.in_bytes, 'B') }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div v-else class="alert alert-info">No data</div>
+            </div>
+
+            <div class="col-12 col-xl-6 top-active-table-col">
+              <h6>Outgoing activity (sorted by {{ topOutgoingMetricLabel }})</h6>
+              <div v-if="topOutgoingActiveIps.length > 0" class="table-responsive">
+                <table class="table table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th scope="col">#</th>
+                      <th scope="col">IP address</th>
+                      <th
+                        scope="col"
+                        class="text-end"
+                        :aria-sort="topOutgoingSort.key === 'flows' ? 'descending' : 'none'"
+                      >
+                        <button
+                          type="button"
+                          class="btn btn-link p-0 text-decoration-none text-reset border-0 sort-toggle"
+                          :class="{ active: topOutgoingSort.key === 'flows' }"
+                          :aria-pressed="topOutgoingSort.key === 'flows'"
+                          @click="setTopActiveIpsSort('out', 'flows')"
+                        >
+                          Flows
+                        </button>
+                      </th>
+                      <th
+                        scope="col"
+                        class="text-end"
+                        :aria-sort="topOutgoingSort.key === 'bytes' ? 'descending' : 'none'"
+                      >
+                        <button
+                          type="button"
+                          class="btn btn-link p-0 text-decoration-none text-reset border-0 sort-toggle"
+                          :class="{ active: topOutgoingSort.key === 'bytes' }"
+                          :aria-pressed="topOutgoingSort.key === 'bytes'"
+                          @click="setTopActiveIpsSort('out', 'bytes')"
+                        >
+                          Bytes
+                        </button>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, index) in topOutgoingActiveIps" :key="`out-${item.eid}`">
+                      <th scope="row">{{ index + 1 }}</th>
+                      <td>
+                        <RouterLink
+                          :to="{ name: 'ip', params: { eid: item.eid } }"
+                          class="text-decoration-none"
+                        >
+                          {{ item.eid }}
+                        </RouterLink>
+                      </td>
+                      <td class="text-end">{{ formatTwoDecimals(item.out_flows, 'flw') }}</td>
+                      <td class="text-end">{{ formatTwoDecimals(item.out_bytes, 'B') }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div v-else class="alert alert-info">No data</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </main>
 </template>
+
+<style scoped>
+.sort-toggle {
+  transition: color 0.15s ease;
+}
+
+.sort-toggle.active {
+  font-weight: 700;
+  text-shadow: 0 0 0.5rem color-mix(in srgb, var(--bs-primary) 55%, transparent);
+}
+
+@media (min-width: 1200px) {
+  .top-active-table-col + .top-active-table-col {
+    border-left: 1px solid var(--bs-border-color);
+    padding-left: 1.5rem;
+  }
+}
+</style>
